@@ -1,0 +1,12 @@
+# --- Core App & Data ---
+streamlit     # The web app framework
+pandas        # For data manipulation (DataFrames)
+numpy         # For numerical operations
+
+# --- Machine Learning & XAI ---
+scikit-learn  # For the ML model (used RandomForest in the demo)
+shap          # For the explainable AI (XAI) plots
+matplotlib    # Required by SHAP for its plotting functions
+
+# --- Visualization ---
+plotly        # For the interactive time-series charts

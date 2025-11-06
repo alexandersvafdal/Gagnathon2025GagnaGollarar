@@ -1,0 +1,123 @@
+# ===================================================================
+# macOS System Files
+# ===================================================================
+# General OS files
+.DS_Store
+.AppleDouble
+.LSOverride
+.Spotlight-V100
+.Trashes
+
+# Thumbnail cache files
+._*
+
+# Finder icon files
+Icon?
+
+# HFS+ metadata
+.VolumeIcon.icns
+.fseventsd
+
+# ===================================================================
+# Python Specific
+# ===================================================================
+
+# --- Virtual Environments ---
+# Common names for virtual environments.
+# Add your specific env name if it's different (e.g., /my-env-name/)
+/venv/
+/env/
+/.venv/
+/.env/
+/venv-project/
+/env.bak/
+
+# --- Bytecode and Compiled Files ---
+# Compiled Python files
+__pycache__/
+*.py[cod]
+*$py.class
+
+# --- Package and Distribution ---
+# Distribution / packaging
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+MANIFEST
+
+# --- Cache & Runtime Files ---
+# C extensions
+*.so
+
+# IPython/Jupyter Notebook
+.ipynb_checkpoints
+
+# Pytest
+.pytest_cache/
+.tox/
+
+# Mypy cache
+.mypy_cache/
+
+# =EXAMPLE.txt
+# ===================================================================
+# IDEs and Editors
+# ===================================================================
+
+# VS Code
+.vscode/
+!.vscode/settings.json
+!.vscode/tasks.json
+!.vscode/launch.json
+!.vscode/extensions.json
+*.code-workspace
+
+# PyCharm
+.idea/
+*.iml
+
+# Sublime Text
+*.sublime-project
+*.sublime-workspace
+
+# ===================================================================
+# Secrets and Credentials
+# ===================================================================
+# Configuration files that should not be in version control
+.env
+.env.*
+secrets.yaml
+config.ini
+
+# Private keys and credentials
+*.pem
+*.key
+*.token
+credentials*
+
+# --- Saved Models (Like your .pkl files) ---
+# IMPORTANT: If your models are large, add them here.
+# *.pkl
+# *.joblib
+# *.h5
+# *.pth
+
+# ===================================================================
+# Other
+# =================================D-o==================================
+# Logs
+logs/
+*.log
