@@ -45,7 +45,7 @@ Our solution was built to meet the datathon's official criteria:
 ---
 
 ### 👥 Team Members
-* [Name 1]
-* [Name 2]
+* Alexander Svarfdal Guðmundsson
+* Birgir Snær Ingason
 * [Name 3]
 * [Name 4]
