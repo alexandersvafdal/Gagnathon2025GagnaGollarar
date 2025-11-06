@@ -5,7 +5,7 @@ import plotly.graph_objects as go
 import shap
 from sklearn.ensemble import RandomForestRegressor
 from sklearn.model_selection import train_test_split
-import joblib  # To show where you would load models
+import joblib
 import matplotlib.pyplot as plt
 
 # --- Page Configuration ---
@@ -15,125 +15,170 @@ st.set_page_config(
     layout="wide"
 )
 
-# --- (SIMULATION) Model Training (In a real app, you'd skip this and just load files) ---
-@st.cache_resource(show_spinner="Simulating model and data...")
+# --- (SIMULATION) Model Training ---
+@st.cache_resource(show_spinner="Simulating all product models...")
 def get_model_and_data():
     """
-    This function simulates a pre-trained model, explainer, and data.
-    In your real project, you would load these from disk (e.g., joblib.load).
+    **NEW**: This function now simulates data and trains a separate
+    model for multiple products.
     """
-    # 1. Create Fake Historical Data
-    dates = pd.date_range(start="2018-01-01", end="2024-12-31", freq='MS')
-    n = len(dates)
-    data = pd.DataFrame(index=dates)
-    data['Cod_Quota_kT'] = np.random.uniform(250, 300, n).cumsum() / (np.arange(n) + 1)
-    data['ISK_EUR_Rate'] = np.random.uniform(130, 150, n).cumsum() / (np.arange(n) + 1)
-    data['SST_Anomaly'] = np.sin(np.arange(n) * 2 * np.pi / 12) + np.random.randn(n) * 0.2
+    PRODUCTS = ["Cod", "Salmon", "Haddock"]
     
-    # Target Variable
-    noise = np.random.randn(n) * 5
-    data['Export_Value_B_ISK'] = (
-        (data['Cod_Quota_kT'] / 10) + 
-        (1 / data['ISK_EUR_Rate'] * 5000) + 
-        (data['SST_Anomaly'] * 3) + 
-        50 + noise
-    )
+    # We will store all our models, data, etc., in dictionaries
+    # keyed by the product name.
+    models = {}
+    explainers = {}
+    historical_data = {}
+    training_data = {}
+    features = ['Main_Quota_kT', 'ISK_EUR_Rate', 'SST_Anomaly']
     
-    # 2. Create Fake Features (Lagging)
-    features = ['Cod_Quota_kT', 'ISK_EUR_Rate', 'SST_Anomaly']
-    X = data[features].shift(1).dropna()  # Use lagged features
-    y = data['Export_Value_B_ISK'][1:]
+    for i, product in enumerate(PRODUCTS):
+        # 1. Create Dates
+        dates = pd.date_range(start="2018-01-01", end="2024-12-31", freq='MS')
+        n = len(dates)
+        
+        # 2. Create Features
+        data = pd.DataFrame(index=dates)
+        
+        # We'll make the dummy data different for each product
+        base_quota = 250 - i * 50 # Cod=250, Salmon=200, Haddock=150
+        base_fx = 140 + i * 5     # Cod=140, Salmon=145, Haddock=150
+        seasonal_strength = (i + 1) * 2 # Cod=2, Salmon=4, Haddock=6
+        
+        data['Main_Quota_kT'] = base_quota + (np.arange(n) / 5) + np.random.randn(n) * 2
+        data['ISK_EUR_Rate'] = base_fx + (np.random.randn(n) * 1.5).cumsum() / 5
+        data['SST_Anomaly'] = np.sin(np.arange(n) * 2 * np.pi / 12) * seasonal_strength + np.random.randn(n) * 0.5
+        
+        # 3. Create Target Variable (Export Value)
+        base_value = 50 - i * 15 # Cod=50, Salmon=35, Haddock=20
+        data['Export_Value_B_ISK'] = (
+            base_value + 
+            (data['Main_Quota_kT'] / 10) - 
+            (data['ISK_EUR_Rate'] / 20) + 
+            (data['SST_Anomaly'] * 2) +  # Seasonal driver
+            np.random.randn(n) * 2      # Noise
+        )
+        
+        # 4. Standard ML setup
+        X = data[features].shift(1).dropna()
+        y = data['Export_Value_B_ISK'][1:]
+        
+        # 5. Train a product-specific model
+        model = RandomForestRegressor(n_estimators=50, random_state=42)
+        model.fit(X, y)
+        
+        # 6. Create a product-specific explainer
+        explainer = shap.TreeExplainer(model)
+        
+        # 7. Store in our dictionaries
+        models[product] = model
+        explainers[product] = explainer
+        historical_data[product] = data
+        training_data[product] = X
     
-    # 3. Train a dummy model
-    model = RandomForestRegressor(n_estimators=50, random_state=42)
-    model.fit(X, y)
-    
-    # 4. Create an explainer
-    explainer = shap.TreeExplainer(model)
-    
-    # 5. Get base SHAP values
-    shap_values = explainer(X)
-    
-    return model, explainer, data, X, features
+    return models, explainers, historical_data, training_data, features, PRODUCTS
 
 # Load all the pre-trained objects
-model, explainer, hist_data, X_train, features = get_model_and_data()
+models, explainers, historical_data, training_data, features, PRODUCTS = get_model_and_data()
 
 # --- App Layout ---
-
 st.title("🐟 Icelandic Fish Export Forecast")
 st.caption("An Explainable AI (XAI) Dashboard for Policy & Risk Simulation")
 
+# --- Sidebar: Product Selection ---
+st.sidebar.header("Product Selection")
+selected_product = st.sidebar.selectbox(
+    "Select Product to Forecast:",
+    options=PRODUCTS
+)
+
 # --- Sidebar: What-If Controls ---
 st.sidebar.header("What-If Scenario Controls")
-st.sidebar.markdown("Adjust the baseline assumptions for the 2-year forecast (2025-2026).")
+st.sidebar.markdown(f"Adjust the assumptions for **{selected_product}**.")
+
+# --- Get Product-Specific Objects ---
+# NOW, all main variables (model, data, etc.) are for the
+# product the user selected in the sidebar.
+model = models[selected_product]
+explainer = explainers[selected_product]
+hist_data = historical_data[selected_product]
+X_train = training_data[selected_product]
+hist_n = len(hist_data) # Get length of historical data
 
 # Create future dates
 future_dates = pd.date_range(start="2025-01-01", end="2026-12-31", freq='MS')
-baseline_future_df = pd.DataFrame(index=future_dates)
 
-# Get baseline values from the last known data point
-baseline_quota = X_train['Cod_Quota_kT'].iloc[-1]
-baseline_fx = X_train['ISK_EUR_Rate'].iloc[-1]
-baseline_sst = X_train['SST_Anomaly'].iloc[-1] # This would normally be a forecast
+# Get baseline values from the last known data point *for this product*
+baseline_quota = X_train[features[0]].iloc[-1]
+baseline_fx = X_train[features[1]].iloc[-1]
 
-# Create sliders for a % change from baseline
+# Create sliders
 quota_mod = st.sidebar.slider(
-    "Cod Quota (% Change)",
+    "Main Quota (% Change)", # Renamed from "Cod Quota"
     min_value=-20.0, max_value=20.0, value=0.0, step=1.0,
-    help="Adjust the % change from the baseline 2024 quota."
+    help=f"Adjust the % change from the baseline 2024 quota for {selected_product}."
 )
 
 fx_mod = st.sidebar.slider(
-    "ISK/EUR Rate (% Change)",
+    "ISK_EUR Rate (% Change)",
     min_value=-20.0, max_value=20.0, value=0.0, step=1.0,
-    help="Adjust the % change from the baseline 2024 FX rate. (Lower = Stronger ISK)"
+    help="Adjust the % change from the baseline 2024 FX rate."
 )
 
 # --- Backend: Generate Forecast ---
-def generate_forecast(quota_mod, fx_mod):
+def generate_future_features(quota_mod, fx_mod, base_quota, base_fx, hist_n):
     """
-    Generates a new forecast based on user inputs.
-    THIS IS THE CORE OF THE "ON-THE-FLY" INTERACTIVITY.
-    It's FAST because it's just calling model.predict() and explainer().
+    Generates the X_future matrix based on user inputs.
     """
-    # 1. Create the future feature matrix (X_future)
     X_future = pd.DataFrame(index=future_dates, columns=features)
     
     # Apply user modifications
-    X_future['Cod_Quota_kT'] = baseline_quota * (1 + quota_mod / 100)
-    X_future['ISK_EUR_Rate'] = baseline_fx * (1 + fx_mod / 100)
-    X_future['SST_Anomaly'] = baseline_sst # Keep it simple, no slider for this one
+    X_future[features[0]] = base_quota * (1 + quota_mod / 100)
+    X_future[features[1]] = base_fx * (1 + fx_mod / 100)
     
-    # 2. Get predictions (FAST!)
-    predictions = model.predict(X_future)
-    forecast_df = pd.DataFrame({'Export_Value_B_ISK': predictions}, index=future_dates)
+    # Create the future seasonal wave
+    future_n = len(future_dates)
+    future_time_index = np.arange(hist_n, hist_n + future_n)
     
-    # 3. Get SHAP values for the new forecast (Also FAST!)
-    future_shap_values = explainer(X_future)
+    # We need to know which product to get the right seasonal strength
+    product_index = PRODUCTS.index(selected_product)
+    seasonal_strength = (product_index + 1) * 2
     
-    return forecast_df, future_shap_values, X_future
+    future_sine_wave = np.sin(future_time_index * 2 * np.pi / 12) * seasonal_strength
+    
+    X_future[features[2]] = future_sine_wave
+    
+    return X_future
 
-# Run the forecast calculation
-forecast_df, future_shap_values, X_future = generate_forecast(quota_mod, fx_mod)
+# --- Run Calculation ---
+# 1. Generate the future features
+X_future = generate_future_features(quota_mod, fx_mod, baseline_quota, baseline_fx, hist_n)
+
+# 2. Use the product-specific model to predict
+predictions = model.predict(X_future)
+forecast_df = pd.DataFrame({'Export_Value_B_ISK': predictions}, index=future_dates)
+
+# 3. Use the product-specific explainer
+future_shap_values = explainer(X_future)
 
 
 # --- Main Page: Tabs ---
 tab1, tab2 = st.tabs(["📈 Forecast & Scenario", "🔍 Explainability (SHAP)"])
 
 with tab1:
-    st.header("24-Month Export Value Forecast")
+    # Title is now dynamic
+    st.header(f"24-Month Export Value Forecast for {selected_product}")
     
     # Create Plotly figure
     fig = go.Figure()
     
-    # 1. Add historical data
+    # 1. Add historical data (for the selected product)
     fig.add_trace(go.Scatter(
         x=hist_data.index,
         y=hist_data['Export_Value_B_ISK'],
         mode='lines',
-        name='Historical Export Value',
-        line=dict(color='gray')
+        name=f'Historical ({selected_product})',
+        line=dict(color='silver', width=2)
     ))
     
     # 2. Add forecast data (from the sliders)
@@ -142,21 +187,26 @@ with tab1:
         y=forecast_df['Export_Value_B_ISK'],
         mode='lines+markers',
         name='Forecast (What-If Scenario)',
-        line=dict(color='red', dash='dot', width=3)
+        line=dict(color='#00FFFF', dash='dot', width=4),
+        marker=dict(size=5)
     ))
     
-    # (Optional) Add a dummy baseline to show the change
-    baseline_forecast, _, _ = generate_forecast(0.0, 0.0) # Run with 0% change
+    # 3. Add baseline forecast
+    # We need to re-generate the baseline features
+    baseline_X_future = generate_future_features(0.0, 0.0, baseline_quota, baseline_fx, hist_n)
+    baseline_predictions = model.predict(baseline_X_future)
+    baseline_forecast_df = pd.DataFrame({'Export_Value_B_ISK': baseline_predictions}, index=future_dates)
+    
     fig.add_trace(go.Scatter(
-        x=baseline_forecast.index,
-        y=baseline_forecast['Export_Value_B_ISK'],
+        x=baseline_forecast_df.index,
+        y=baseline_forecast_df['Export_Value_B_ISK'],
         mode='lines',
         name='Baseline Forecast',
-        line=dict(color='blue', dash='dash')
+        line=dict(color='#FF8C00', dash='dash', width=3)
     ))
 
     fig.update_layout(
-        title="Historical Data vs. 'What-If' Forecast",
+        title=f"Historical vs. 'What-If' Forecast for {selected_product}",
         xaxis_title="Date",
         yaxis_title="Export Value (Billion ISK)",
         legend_title="Series"
@@ -165,16 +215,16 @@ with tab1:
     st.plotly_chart(fig, use_container_width=True)
 
 with tab2:
-    st.header("Understanding the Forecast Drivers")
+    st.header(f"Understanding the Forecast Drivers for {selected_product}")
     st.markdown("Powered by SHAP (SHapley Additive exPlanations)")
 
     st.subheader("Global Feature Importance")
-    st.markdown("Which features have the biggest impact on the forecast *overall*?")
+    st.markdown(f"Which features have the biggest impact on the **{selected_product}** forecast *overall*?")
     
     # --- Global Importance Plot (Summary) ---
-    # We use the SHAP values from the *training* data (X) for the global plot
+    # This now uses the X_train for the selected product
     shap.summary_plot(explainer(X_train), X_train, plot_type="bar", show=False)
-    st.pyplot(plt.gcf(), clear_figure=True) # Display the plot and clear it
+    st.pyplot(plt.gcf(), clear_figure=True)
     
     st.divider()
     
@@ -183,46 +233,43 @@ with tab2:
 
     # --- Local Explanation ---
     
-    # 1. Create a list of formatted date strings for the dropdown
+    # 1. Create a list of formatted date strings
     formatted_dates = [d.strftime('%B %Y') for d in future_dates]
     
     # 2. Create the dropdown (selectbox)
     selected_date_str = st.selectbox(
         "Select a forecast month to explain:",
-        options=formatted_dates
+        options=formatted_dates,
+        key=f"selectbox_{selected_product}" # Add a dynamic key
     )
     
-    # 3. Find the integer index of the date the user selected
+    # 3. Find the integer index
     month_idx = formatted_dates.index(selected_date_str)
     
     st.markdown(f"**Explanation for {selected_date_str}:**")
     
     # --- Local Plot ---
-    # Get the base value (average prediction)
+    # These variables are already product-specific
     base_value = explainer.expected_value
-    
-    # Get the SHAP values for the selected month
     shap_values_for_month = future_shap_values.values[month_idx]
-    
-    # Get the feature values for the selected month
     data_for_month = X_future.iloc[month_idx]
     
     # Generate the waterfall plot
     shap.waterfall_plot(
         shap.Explanation(
-            base_values=base_value[0], # <-- Can also add [0] here, good practice
+            base_values=base_value[0],
             values=shap_values_for_month,
             feature_names=features,
             data=data_for_month
         ),
         show=False
     )
-    st.pyplot(plt.gcf(), clear_figure=True) # Display the plot
+    st.pyplot(plt.gcf(), clear_figure=True)
     
     st.markdown(f"""
     **How to read this plot:**
-    * `E[f(x)]` is the model's average "base" prediction (e.g., **{base_value[0]:.2f}** Billion ISK). 
-    * Red bars (like Cod Quota) are features **pushing the forecast UP** for this month.
-    * Blue bars (like ISK/EUR Rate) are features **pulling the forecast DOWN**.
+    * `E[f(x)]` is the model's average "base" prediction (e.g., **{base_value[0]:.2f}** Billion ISK).
+    * Red bars are features **pushing the forecast UP** for this month.
+    * Blue bars are features **pulling the forecast DOWN**.
     * `f(x)` is the final forecast for this month (e.g., **{forecast_df['Export_Value_B_ISK'].iloc[month_idx]:.2f}** Billion ISK).
     """)
