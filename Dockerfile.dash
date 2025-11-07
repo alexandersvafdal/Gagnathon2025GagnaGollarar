@@ -1,0 +1,32 @@
+# --- Stage 1: Base Image ---
+# Use the stable Python 3.12 image
+FROM python:3.13-slim
+
+# --- Stage 2: Environment Setup ---
+# Set the working directory inside the container
+WORKDIR /app
+
+# Set environment variables for Python
+ENV PYTHONDONTWRITEBYTECODE 1
+ENV PYTHONUNBUFFERED 1
+
+# --- Stage 3: Install Dependencies ---
+# Copy requirements file first to leverage Docker's layer caching
+COPY requirements.txt .
+
+# Install dependencies (including gunicorn for production)
+RUN pip install --no-cache-dir -r requirements.txt
+
+# --- Stage 4: Copy Application Code ---
+# Copy the rest of your app's code, including the 'assets' folder
+COPY . .
+
+# --- Stage 5: Expose Port ---
+# Expose the port Gunicorn will run on (matches the CMD)
+EXPOSE 8050
+
+# --- Stage 6: Run Command ---
+# Use Gunicorn to run the app
+# 'app_dash:app.server' means: run the 'server' object inside the 'app' variable,
+# which is in the 'app_dash.py' file.
+CMD ["gunicorn", "--workers=2", "--bind=0.0.0.0:8050", "dash_app:app.server"]
