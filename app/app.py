@@ -1,5 +1,5 @@
 import dash
-from dash import dcc, html, Input, Output, State, ALL
+from dash import Dash,dcc, html, Input, Output, State, ALL
 import dash_bootstrap_components as dbc
 import plotly.graph_objects as go
 import numpy as np
@@ -11,6 +11,9 @@ matplotlib.use('Agg')
 import matplotlib.pyplot as plt
 import io
 import base64
+import os
+debug = True
+
 
 # --- 1. LOAD PRE-COMPUTED DATA ---
 try:
@@ -35,8 +38,14 @@ SCENARIO_LEVELS = {
 }
 
 # --- Initialize the Dash App ---
-app = dash.Dash(__name__, external_stylesheets=[dbc.themes.SUPERHERO, dbc.icons.FONT_AWESOME])
-app.title = "Icelandic Economic Simulator"
+# REMOVED the first, incorrect app = Dash(__name__)
+app = dash.Dash(
+    __name__, 
+    external_stylesheets=[dbc.themes.SUPERHERO, dbc.icons.FONT_AWESOME]
+)
+
+# MOVED server = app.server to be *after* the *correct* app initialization
+server = app.server
 
 # --- == Define the App Layout == ---
 navbar = dbc.Navbar(
@@ -275,6 +284,7 @@ def update_shap_plots(selected_sector):
     
     return global_plot_src, local_plot_src
 
-# --- Run the App ---
-if __name__ == '__main__':
-    app.run(debug=True, port=8050)
+
+
+if __name__ == "__main__":
+    app.run(host="0.0.0.0", port="8050", debug=debug)

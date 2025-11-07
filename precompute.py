@@ -349,7 +349,7 @@ def main():
         all_forecasts.append(hist_df)
 
     final_df = pd.concat(all_forecasts, ignore_index=True)
-    final_df.to_parquet("precomputed_forecasts.parquet", index=False)
+    final_df.to_parquet("app/precomputed_forecasts.parquet", index=False)
     
     print("Pre-rendering baseline SHAP plots...")
     shap_plots = {}
@@ -398,12 +398,12 @@ def main():
             'local_plot_src': convert_plt_to_base64_transparent(fig_local)
         }
     
-    with open('baseline_shap_plots.json', 'w') as f:
+    with open('app/baseline_shap_plots.json', 'w') as f:
         json.dump(shap_plots, f)
         
     print("--- Pre-computation Complete! ---")
-    print(f"Saved {len(final_df)} rows to 'precomputed_forecasts.parquet'")
-    print("Saved baseline SHAP plots to 'baseline_shap_plots.json'")
+    print(f"Saved {len(final_df)} rows to 'app/precomputed_forecasts.parquet'")
+    print("Saved baseline SHAP plots to 'app/baseline_shap_plots.json'")
 
 if __name__ == '__main__':
     main()

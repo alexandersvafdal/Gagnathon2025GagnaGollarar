@@ -1,5 +1,4 @@
 # --- Core App & Data ---
-streamlit     # The web app framework
 pandas        # For data manipulation (DataFrames)
 numpy         # For numerical operations
 
