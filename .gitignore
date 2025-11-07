@@ -121,3 +121,4 @@ credentials*
 # Logs
 logs/
 *.log
+/AutoGluonModels
