@@ -48,6 +48,18 @@ This is the best way to ensure the environment is identical for all users.
 3.  **Access the App:**
     Open your browser and go to **http://localhost:8501**
 
+4.  **Build and Run the Docker Container with Docker Compose:**
+    Make sure you have Docker Desktop installed and running. From the project's root directory, run:
+    ```bash
+    docker-compose up --build
+    ```
+
+5.  **Access the App:**
+    Open your browser and go to **http://localhost:8050**
+
+6.  **Stop the App:**
+    To stop the app, press `Ctrl+C` in the terminal where Docker Compose is running.
+
 > **Browser Warning (macOS Users):**
 >
 > You may see a **blank white page** if you open the app in **Safari** while it's running in Docker.

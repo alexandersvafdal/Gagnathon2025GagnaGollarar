@@ -12,3 +12,6 @@ plotly        # For the interactive time-series charts
 dash
 dash-bootstrap-components
 autogluon
+gunicorn
+
+pyarrow
