@@ -1,54 +1,50 @@
-# --- START OF FIX ---
-# Force matplotlib to use a non-GUI backend (Agg)
-# This MUST be done before importing pyplot or shap
-import matplotlib
-matplotlib.use('Agg')
-# --- END OF FIX ---
-
 import dash
 from dash import dcc, html, Input, Output, State, ALL
+import dash_bootstrap_components as dbc
 import plotly.graph_objects as go
 import numpy as np
 import pandas as pd
 import shap
 from sklearn.ensemble import RandomForestRegressor
-import matplotlib.pyplot as plt # This import is now safe
+import matplotlib
+matplotlib.use('Agg')
+import matplotlib.pyplot as plt
 import io
 import base64
 
 # --- Matplotlib (SHAP) to HTML Image Converter ---
 def convert_plt_to_base64(fig):
-    """Converts a matplotlib figure to a base64 string for html.Img."""
     buf = io.BytesIO()
+    # --- MODIFIED: Save with a standard (white) background for the global plot ---
+    # We will make the local plot transparent separately
     fig.savefig(buf, format="png", bbox_inches='tight')
     plt.close(fig) # Close the plot to save memory
     data = base64.b64encode(buf.getbuffer()).decode("utf8")
     return "data:image/png;base64," + data
 
-# --- (SIMULATION) Model & Data Generation ---
-# This is the same "backend" from our Streamlit app
-@dash.callback(Output('models-store', 'data'), Input('models-store', 'id')) # This is a trick to run on load
+# --- NEW: Converter for transparent (dark) plots ---
+def convert_plt_to_base64_transparent(fig):
+    buf = io.BytesIO()
+    # Save with a transparent background
+    fig.savefig(buf, format="png", bbox_inches='tight', transparent=True)
+    plt.close(fig)
+    data = base64.b64encode(buf.getbuffer()).decode("utf8")
+    return "data:image/png;base64," + data
+
+# --- (SIMULATION) Model & Data Generation (Identical) ---
+@dash.callback(Output('models-store', 'data'), Input('models-store', 'id'))
 def get_all_models_and_data(_):
-    """
-    Simulates a multi-model ecosystem for different sectors.
-    This runs ONCE on startup and stores models in dcc.Store.
-    NOTE: Storing trained models like this is simple for a demo,
-    but for true production, you'd load them from disk.
-    """
     SECTORS = ["🐟 Cod Exports", "✈️ Tourism", "🏭 Aluminum"]
-    
     models = {}
     explainers = {}
     historical_data = {}
     training_data = {}
-    
     features_map = {
         "🐟 Cod Exports": ["Cod_Quota_kT", "Norwegian_Quota_kT", "ISK_EUR_Rate", "Marine_Fuel_Price"],
         "✈️ Tourism": ["Airline_Seat_Capacity", "ISK_EUR_Rate", "EU_Economic_Sentiment", "Jet_Fuel_Price"],
         "🏭 Aluminum": ["LME_Aluminum_Price", "Carbon_Credit_Price_EUR", "Global_Industrial_Production", "Electricity_Cost"]
     }
     
-    # --- Generate a model for each sector ---
     for sector in SECTORS:
         features = features_map[sector]
         dates = pd.date_range(start="2018-01-01", end="2024-12-31", freq='MS')
@@ -57,35 +53,23 @@ def get_all_models_and_data(_):
         X = pd.DataFrame(index=data.index[1:], columns=features)
         base_time = np.arange(n-1)
         seasonal = np.sin(base_time * 2 * np.pi / 12) * 50
-        
         X[features[0]] = 100 + base_time * 0.1 + seasonal + np.random.randn(n-1)*5
         X[features[1]] = 120 - base_time * 0.05 + seasonal + np.random.randn(n-1)*5
         X[features[2]] = 140 + (np.random.randn(n-1)*1.5).cumsum()
         X[features[3]] = 80 + seasonal * 0.5 + np.random.randn(n-1)*2
-
         y = 50 + np.random.randn(n-1)*2
         y += (X[features[0]] - 100) * 2.5
         y -= (X[features[1]] - 120) * 2.0
         y -= (X[features[2]] - 140) * 1.5
         y -= (X[features[3]] - 80) * 0.5
-
         data['Target_Value'] = np.nan
         data.iloc[1:, data.columns.get_loc('Target_Value')] = y
-
         model = RandomForestRegressor(n_estimators=30, random_state=42)
         model.fit(X, y)
         explainer = shap.TreeExplainer(model)
-        
-        # We can't store the actual model objects in dcc.Store (not JSON serializable)
-        # For this demo, we'll just re-train the simple model inside the callback.
-        # In a real app, you'd load a saved model from disk.
-        
-        # Store data needed to re-train
         historical_data[sector] = data.to_json()
         training_data[sector] = X.to_json()
 
-    # We will return the *data* and *features*, and re-train the
-    # simple model on-the-fly inside the callback.
     return {
         "historical_data": historical_data,
         "training_data": training_data,
@@ -94,80 +78,108 @@ def get_all_models_and_data(_):
     }
 
 # --- Initialize the Dash App ---
-app = dash.Dash(__name__, external_stylesheets=['https://codepen.io/chriddyp/pen/bWLwgP.css'])
+app = dash.Dash(__name__, external_stylesheets=[dbc.themes.SUPERHERO, dbc.icons.FONT_AWESOME])
 app.title = "Icelandic Economic Simulator"
 
-# --- Define the App Layout ---
-app.layout = html.Div([
-    
-    # --- Invisible Data Stores ---
-    # Stores the "global" model data (runs once on load)
-    dcc.Store(id='models-store'),
-    # Stores the *results* of the latest simulation
-    dcc.Store(id='simulation-data-store'),
-
-    # --- Header ---
-    html.H1("🌍 Icelandic Macro-Economic Simulator (Dash Version)", style={'textAlign': 'center'}),
-    html.Hr(),
-
-    # --- Main Container (Sidebar + Content) ---
-    html.Div(className='row', children=[
-        
-        # --- Sidebar ---
-        html.Div(className='three columns', style={'padding': '10px'}, children=[
-            html.H3("1. Select Sector"),
-            dcc.Dropdown(
-                id='sector-dropdown',
-                options=[], # Will be populated by callback
-                value=None,
-                clearable=False
+# --- == Define the App Layout == ---
+navbar = dbc.Navbar(
+    dbc.Container(
+        [
+            html.A(
+                dbc.Row(
+                    [
+                        dbc.Col(html.Img(src="https.cdn-icons-png.flaticon.com/512/2170/2170316.png", height="30px")),
+                        dbc.Col(dbc.NavbarBrand("Icelandic Economic Simulator")),
+                    ],
+                    align="center",
+                    className="g-0",
+                ),
+                href="#",
+                style={"textDecoration": "none"},
             ),
-            
-            html.H3("2. 🌍 Macro-Economic Levers"),
-            html.Label("Central Bank Rate (Rel. %)"),
-            dcc.Slider(id='cbank-rate-slider', min=-2.0, max=2.0, step=0.25, value=0.0, marks={i: str(i) for i in [-2, 0, 2]}),
-            
-            html.Label("Brent Oil Price (% Change)"),
-            dcc.Slider(id='oil-price-slider', min=-30.0, max=50.0, step=5.0, value=0.0, marks={i: f"{i}%" for i in [-30, 0, 50]}),
-            
-            html.Label("Wage Index (% Change)"),
-            dcc.Slider(id='wage-index-slider', min=-5.0, max=10.0, step=1.0, value=0.0, marks={i: f"{i}%" for i in [-5, 0, 10]}),
-            
-            html.Hr(),
-            
-            html.H3("3. Sectoral Levers"),
-            # This Div is the *target* for our dynamic sliders
-            html.Div(id='sector-levers-container'),
-        ]),
+        ]
+    ),
+    color="dark",
+    dark=True,
+    className="mb-4",
+)
+
+sidebar = dbc.Col(
+    [
+        dbc.Card(
+            dbc.CardBody([
+                html.H4(html.I(className="fa-solid fa-industry me-2"), "1. Select Sector"),
+                dcc.Dropdown(id='sector-dropdown', options=[], value=None, clearable=False, className='dark-dropdown'),
+            ]),
+            className="sidebar-card",
+        ),
+        dbc.Card(
+            dbc.CardBody([
+                html.H4(html.I(className="fa-solid fa-globe me-2"), "2. Macro-Economic Levers"),
+                html.Label("Central Bank Rate (Rel. %)", className="form-label"),
+                dcc.Slider(id='cbank-rate-slider', min=-2.0, max=2.0, step=0.25, value=0.0, marks={i: str(i) for i in [-2, 0, 2]}),
+                
+                html.Label("Brent Oil Price (% Change)", className="form-label"),
+                dcc.Slider(id='oil-price-slider', min=-30.0, max=50.0, step=5.0, value=0.0, marks={i: f"{i}%" for i in [-30, 0, 50]}),
+
+                html.Label("Wage Index (% Change)", className="form-label"),
+                dcc.Slider(id='wage-index-slider', min=-5.0, max=10.0, step=1.0, value=0.0, marks={i: f"{i}%" for i in [-5, 0, 10]}),
+            ]),
+            className="sidebar-card",
+        ),
+        dbc.Card(
+            dbc.CardBody([
+                html.H4(html.I(className="fa-solid fa-sliders me-2"), "3. Sectoral Levers"),
+                html.Div(id='sector-levers-container'),
+            ]),
+            className="sidebar-card",
+        ),
+    ],
+    md=4,
+)
+
+main_content = dbc.Col(
+    dbc.Tabs(id='main-tabs', children=[
         
-        # --- Main Content Area (Tabs) ---
-        html.Div(className='nine columns', children=[
-            dcc.Tabs(id='main-tabs', children=[
-                
-                # --- Tab 1: Forecast Chart ---
-                dcc.Tab(label='📈 Forecast & Scenario', children=[
-                    dcc.Graph(id='main-forecast-chart')
-                ]),
-                
-                # --- Tab 2: Explainability (SHAP) ---
-                dcc.Tab(label='🔍 Explainability (SHAP)', children=[
-                    html.Div(style={'padding': '10px'}, children=[
-                        html.H4("Global Feature Importance"),
-                        html.P("Which features have the biggest impact on this model overall?"),
-                        # SHAP plots will be rendered as images
-                        html.Img(id='shap-global-plot', style={'width': '100%'}),
-                        
-                        html.Hr(),
-                        
-                        html.H4("Local Forecast Explanation"),
-                        html.P("Why did the model predict a specific value for a single month?"),
-                        dcc.Dropdown(id='shap-month-dropdown', options=[], placeholder="Select a forecast month..."),
-                        html.Img(id='shap-local-plot', style={'width': '100%'})
-                    ])
-                ]),
-            ])
-        ]),
+        dbc.Tab(
+            label="📈 Forecast & Scenario",
+            tab_id="tab-forecast",
+            children=[
+                dcc.Graph(id='main-forecast-chart', figure={'layout': {'template': 'plotly_dark'}}, style={'height': '70vh'})
+            ]
+        ),
+        
+        dbc.Tab(
+            label="🔍 Explainability (SHAP)",
+            tab_id="tab-explain",
+            children=[
+                html.H4("Global Feature Importance", className="mt-3"),
+                html.P("Which features have the biggest impact on this model overall?"),
+                # --- NEW: Added a wrapper with a light background ---
+                html.Div(
+                    html.Img(id='shap-global-plot', style={'width': '100%'}),
+                    style={'backgroundColor': 'white', 'padding': '10px', 'borderRadius': '5px'}
+                ),
+                html.Hr(),
+                html.H4("Local Forecast Explanation"),
+                html.P("Why did the model predict a specific value for a single month?"),
+                dcc.Dropdown(id='shap-month-dropdown', options=[], placeholder="Select a forecast month...", className='dark-dropdown'),
+                html.Img(id='shap-local-plot', style={'width': '100%'})
+            ]
+        ),
     ]),
+    md=8,
+)
+
+app.layout = html.Div([
+    navbar,
+    dbc.Container(
+        dbc.Row([sidebar, main_content]),
+        fluid=True,
+        className="dbc"
+    ),
+    dcc.Store(id='models-store'),
+    dcc.Store(id='simulation-data-store'),
 ])
 
 # --- == Callbacks == ---
@@ -183,64 +195,56 @@ def populate_sector_dropdown(models_data):
         return [], None
     sectors = models_data['sectors']
     options = [{'label': s, 'value': s} for s in sectors]
-    return options, sectors[0] # Return options and default value
+    return options, sectors[0]
 
 # Callback 2: Update Sector-Specific Sliders
 @app.callback(
     Output('sector-levers-container', 'children'),
     Input('sector-dropdown', 'value'),
-    State('models-store', 'data') # Use State since we only need to read it
+    State('models-store', 'data')
 )
 def update_sectoral_levers(selected_sector, models_data):
     if not selected_sector or not models_data:
         return []
-
     features_map = models_data['features_map']
     sector_features = features_map[selected_sector]
-    
-    # Dynamically create a list of sliders
     dynamic_sliders = []
     
-    # --- 🐟 Cod Levers ---
     if "Cod_Quota_kT" in sector_features:
         dynamic_sliders.extend([
-            html.Label("Icelandic Cod Quota (% Change)"),
+            html.Label("Icelandic Cod Quota (% Change)", className="form-label"),
             dcc.Slider(id={'type': 'sector-slider', 'feature': 'Cod_Quota_kT'}, min=-20, max=20, step=1, value=0, marks={-20: '-20%', 20: '+20%'})
         ])
     if "Norwegian_Quota_kT" in sector_features:
         dynamic_sliders.extend([
-            html.Label("Norwegian/Russian Quota (% Change)"),
+            html.Label("Norwegian/Russian Quota (% Change)", className="form-label"),
             dcc.Slider(id={'type': 'sector-slider', 'feature': 'Norwegian_Quota_kT'}, min=-20, max=20, step=1, value=0, marks={-20: '-20%', 20: '+20%'})
         ])
-        
-    # --- ✈️ Tourism Levers ---
     if "Airline_Seat_Capacity" in sector_features:
         dynamic_sliders.extend([
-            html.Label("Airline Seat Capacity (% Change)"),
+            html.Label("Airline Seat Capacity (% Change)", className="form-label"),
             dcc.Slider(id={'type': 'sector-slider', 'feature': 'Airline_Seat_Capacity'}, min=-25, max=25, step=1, value=0, marks={-25: '-25%', 25: '+25%'})
         ])
     if "EU_Economic_Sentiment" in sector_features:
         dynamic_sliders.extend([
-            html.Label("EU Economic Sentiment (% Change)"),
+            html.Label("EU Economic Sentiment (% Change)", className="form-label"),
             dcc.Slider(id={'type': 'sector-slider', 'feature': 'EU_Economic_Sentiment'}, min=-10, max=10, step=1, value=0, marks={-10: '-10%', 10: '+10%'})
         ])
-        
-    # --- 🏭 Aluminum Levers ---
     if "LME_Aluminum_Price" in sector_features:
         dynamic_sliders.extend([
-            html.Label("LME Aluminum Price (% Change)"),
+            html.Label("LME Aluminum Price (% Change)", className="form-label"),
             dcc.Slider(id={'type': 'sector-slider', 'feature': 'LME_Aluminum_Price'}, min=-30, max=30, step=1, value=0, marks={-30: '-30%', 30: '+30%'})
         ])
     if "Carbon_Credit_Price_EUR" in sector_features:
         dynamic_sliders.extend([
-            html.Label("Carbon Credit Price (€/tonne)"),
+            html.Label("Carbon Credit Price (€/tonne)", className="form-label"),
             dcc.Slider(id={'type': 'sector-slider', 'feature': 'Carbon_Credit_Price_EUR'}, min=0, max=200, step=5, value=80, marks={0: '0€', 200: '200€'})
         ])
-
+    
+    dynamic_sliders.append(html.Br())
     return dynamic_sliders
 
 # Callback 3: Run Simulation, Update Chart, and Update SHAP Plots
-# This is the "main" callback that does all the work.
 @app.callback(
     Output('main-forecast-chart', 'figure'),
     Output('simulation-data-store', 'data'),
@@ -249,8 +253,8 @@ def update_sectoral_levers(selected_sector, models_data):
     Input('cbank-rate-slider', 'value'),
     Input('oil-price-slider', 'value'),
     Input('wage-index-slider', 'value'),
-    Input({'type': 'sector-slider', 'feature': ALL}, 'value'), # Pattern-matching
-    State({'type': 'sector-slider', 'feature': ALL}, 'id'),   # Get IDs of dynamic sliders
+    Input({'type': 'sector-slider', 'feature': ALL}, 'value'),
+    State({'type': 'sector-slider', 'feature': ALL}, 'id'),
     State('models-store', 'data')
 )
 def run_simulation_and_update_plots(
@@ -258,16 +262,14 @@ def run_simulation_and_update_plots(
     dynamic_slider_values, dynamic_slider_ids, models_data):
 
     if not selected_sector or not models_data:
-        return go.Figure(), {}, ""
+        return go.Figure(layout={'template': 'plotly_dark'}), {}, ""
 
-    # --- 1. Rebuild Sectoral Inputs Dictionary ---
     sectoral_inputs = {}
     for i, slider_id_dict in enumerate(dynamic_slider_ids):
         feature_name = slider_id_dict['feature']
         feature_value = dynamic_slider_values[i]
         sectoral_inputs[feature_name] = feature_value
 
-    # --- 2. Re-train simple model (Demo only) ---
     features_map = models_data['features_map']
     sector_features = features_map[selected_sector]
     X_train_json = models_data['training_data'][selected_sector]
@@ -281,11 +283,9 @@ def run_simulation_and_update_plots(
     model.fit(X_train, y_train)
     explainer = shap.TreeExplainer(model)
 
-    # --- 3. Run Simulation Logic ---
     future_dates = pd.date_range(start="2025-01-01", end="2026-12-31", freq='MS')
     n_future = len(future_dates)
     
-    # This logic is copied from our Streamlit app's `run_simulation`
     fx_rate_change = (wage_mod * 0.8) - (rate_mod * 2.0)
     isk_eur_rate_future = 145 * (1 + fx_rate_change / 100)
     marine_fuel_future = 100 * (1 + (oil_mod * 1.5) / 100)
@@ -304,7 +304,6 @@ def run_simulation_and_update_plots(
         "seasonal_driver": np.sin(np.arange(n_future) * 2 * np.pi / 12) * 50
     }
 
-    # --- 4. Build X_future matrix ---
     def build_x_future(inputs):
         X_future = pd.DataFrame(index=future_dates, columns=sector_features)
         for feature in sector_features:
@@ -323,11 +322,9 @@ def run_simulation_and_update_plots(
                 X_future[feature] = 100
         return X_future
 
-    # Build for "What-If"
     X_future_whatif = build_x_future(sectoral_inputs)
     predictions_whatif = model.predict(X_future_whatif)
     
-    # Build for "Baseline"
     baseline_sector_inputs = {k: 0.0 for k in sectoral_inputs if k != "Carbon_Credit_Price_EUR"}
     if "Carbon_Credit_Price_EUR" in sectoral_inputs:
         baseline_sector_inputs["Carbon_Credit_Price_EUR"] = 80
@@ -339,17 +336,38 @@ def run_simulation_and_update_plots(
     fig.add_trace(go.Scatter(x=hist_data.index, y=hist_data['Target_Value'], mode='lines', name=f'Historical', line=dict(color='gray', width=2, dash='dot')))
     fig.add_trace(go.Scatter(x=future_dates, y=predictions_baseline, mode='lines', name='Baseline Forecast', line=dict(color='#007BFF', dash='dash', width=3)))
     fig.add_trace(go.Scatter(x=future_dates, y=predictions_whatif, mode='lines+markers', name='What-If Scenario', line=dict(color='#FF006E', width=4), marker=dict(size=5)))
-    fig.update_layout(title=f"Forecast for {selected_sector.split(' ')[1]}", xaxis_title="Date", yaxis_title="Simulated Value")
+    fig.update_layout(
+        title=f"Forecast for {selected_sector.split(' ')[1]}",
+        xaxis_title="Date",
+        yaxis_title="Simulated Value",
+        template="plotly_dark",
+        legend_title="Series",
+        paper_bgcolor='rgba(0,0,0,0)',
+        plot_bgcolor='rgba(0,0,0,0)'
+    )
 
-    # --- 6. Generate Global SHAP Plot ---
-    fig_global, ax_global = plt.subplots()
-    shap.summary_plot(explainer(X_train), X_train, plot_type="bar", show=False)
+    # --- 6. Generate Global SHAP Plot (REVERTED TO DEFAULT THEME) ---
+    
+    # --- NEW: Reset plt.rcParams to default for this plot ---
+    plt.rcdefaults() 
+    
+    shap.summary_plot(
+        explainer(X_train), X_train, 
+        plot_type="bar", 
+        show=False,
+        # No color or theme arguments
+    )
+    
+    fig_global = plt.gcf()
+    # No custom title color
+    fig_global.axes[0].set_title("Global Feature Importance")
+    
+    # --- Use the standard (white bg) converter ---
     global_plot_src = convert_plt_to_base64(fig_global)
+    # --- END OF REVERT ---
+
 
     # --- 7. Prepare Data for Local SHAP Plot ---
-    # We store the simulation results in the dcc.Store
-    # This way, the local SHAP callback only reads this data
-    # and doesn't need to re-run the whole simulation.
     future_shap_values = explainer(X_future_whatif)
     base_value = explainer.expected_value
     if isinstance(base_value, np.ndarray):
@@ -357,7 +375,7 @@ def run_simulation_and_update_plots(
 
     store_data = {
         "base_value": base_value,
-        "shap_values": future_shap_values.values.tolist(), # Convert to list for JSON
+        "shap_values": future_shap_values.values.tolist(),
         "x_future": X_future_whatif.to_json(),
         "features": sector_features,
         "predictions": predictions_whatif.tolist()
@@ -369,39 +387,44 @@ def run_simulation_and_update_plots(
 @app.callback(
     Output('shap-month-dropdown', 'options'),
     Output('shap-month-dropdown', 'value'),
-    Input('simulation-data-store', 'data') # Triggered when simulation runs
+    Input('simulation-data-store', 'data')
 )
 def update_month_dropdown(store_data):
     if not store_data:
         return [], None
-    
     future_dates = pd.date_range(start="2025-01-01", end="2026-12-31", freq='MS')
     options = [{'label': d.strftime('%B %Y'), 'value': i} for i, d in enumerate(future_dates)]
-    
-    return options, 0 # Default to the first month
+    return options, 0
 
-# Callback 5: Update Local SHAP Plot
+# Callback 5: Update Local SHAP Plot (Stays Dark)
 @app.callback(
     Output('shap-local-plot', 'src'),
-    Input('shap-month-dropdown', 'value'), # Triggered by user selecting a month
-    State('simulation-data-store', 'data') # Read the stored simulation data
+    Input('shap-month-dropdown', 'value'),
+    State('simulation-data-store', 'data')
 )
 def update_local_shap_plot(month_idx, store_data):
     if month_idx is None or not store_data:
         return ""
         
-    # Read all data from the store
     base_value = store_data['base_value']
-    shap_values = np.array(store_data['shap_values']) # Convert back to numpy
+    shap_values = np.array(store_data['shap_values'])
     X_future = pd.read_json(store_data['x_future'])
     features = store_data['features']
     
-    # Get data for the selected month
     shap_values_for_month = shap_values[month_idx]
     data_for_month = X_future.iloc[month_idx]
 
-    # Generate the waterfall plot
-    fig_local, ax_local = plt.subplots()
+    # --- Set theme for *this plot only* ---
+    theme_text_color = '#E9ECEF'
+    plt.rcParams['text.color'] = theme_text_color
+    plt.rcParams['axes.labelcolor'] = theme_text_color
+    plt.rcParams['xtick.color'] = theme_text_color
+    plt.rcParams['ytick.color'] = theme_text_color
+    plt.rcParams['figure.facecolor'] = 'none'
+    plt.rcParams['axes.facecolor'] = 'none'
+    plt.rcParams['axes.edgecolor'] = theme_text_color
+    plt.rcParams['savefig.transparent'] = True
+
     shap.waterfall_plot(
         shap.Explanation(
             base_values=base_value,
@@ -411,7 +434,10 @@ def update_local_shap_plot(month_idx, store_data):
         ),
         show=False
     )
-    local_plot_src = convert_plt_to_base64(fig_local)
+    fig_local = plt.gcf()
+    
+    # --- Use the transparent converter ---
+    local_plot_src = convert_plt_to_base64_transparent(fig_local)
     
     return local_plot_src
 

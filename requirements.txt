@@ -10,3 +10,5 @@ matplotlib    # Required by SHAP for its plotting functions
 
 # --- Visualization ---
 plotly        # For the interactive time-series charts
+dash
+dash-bootstrap-components
