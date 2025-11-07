@@ -44,7 +44,7 @@ app = dash.Dash(
     external_stylesheets=[dbc.themes.SUPERHERO, dbc.icons.FONT_AWESOME]
 )
 
-# MOVED server = app.server to be *after* the *correct* app initialization
+# Ensure the `server` attribute is exposed for Gunicorn
 server = app.server
 
 # --- == Define the App Layout == ---
