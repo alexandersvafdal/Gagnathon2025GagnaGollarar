@@ -6,9 +6,9 @@ This repository contains our team's solution for the HVDS AI Gagnathon 2025.
 
 ### 🛠️ Tech Architecture
 
-* **Model:** [e.g., BILSTM, AutoGluon, Transformer]
-* **Core Libraries:** [e.g., Pandas, TensorFlow/Keras, Scikit-learn]
-* **Frontend:** [e.g., Streamlit, Flask]
+* **Model:** [BILSTM, AutoGluon, Transformer]
+* **Core Libraries:** [Pandas, TensorFlow/Keras, Scikit-learn]
+* **Frontend:** [Streamlit]
 * **Language:** Python 🐍
 
 ---
@@ -24,10 +24,6 @@ This repository contains our team's solution for the HVDS AI Gagnathon 2025.
     (e.g., to run the demo app)
     ```bash
     streamlit run app.py
-    ```
-    (e.g., to run the main script)
-    ```bash
-    python main.py
     ```
 
 ---
@@ -47,5 +43,5 @@ Our solution was built to meet the datathon's official criteria:
 ### 👥 Team Members
 * Alexander Svarfdal Guðmundsson
 * Birgir Snær Ingason
-* [Name 3]
-* [Name 4]
+* Elvar Þór Sævarsson
+* Sigurður Baldursson
