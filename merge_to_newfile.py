@@ -1,31 +1,36 @@
 import pandas as pd
 
-# Read both CSV files as strings to preserve formatting
-al_total = pd.read_csv('data/cleaned/AL_TOTAL.csv', dtype=str)
-electricity = pd.read_csv('data/aukagogn/IcelandElectrisityPrice.csv', dtype=str)
+# Read the two files
+tonnes_df = pd.read_csv('data/cleaned/AL_TOTAL_v2_Tonnes.csv')
+fobvalue_df = pd.read_csv('data/cleaned/AL_TOTAL_v2_fobValue.csv')
 
-# Merge on dates: AL_TOTAL.time == IcelandElectrisityPrice.observation_date
-merged = al_total.merge(
-    electricity,
-    left_on='time',
-    right_on='observation_date',
-    how='left'
+# Rename DATA columns
+tonnes_df = tonnes_df.rename(columns={'DATA': 'tonnes'})
+fobvalue_df = fobvalue_df.rename(columns={'DATA': 'fobvalue'})
+
+# Drop Unit column from both dataframes
+tonnes_df = tonnes_df.drop(columns=['Unit'])
+fobvalue_df = fobvalue_df.drop(columns=['Unit'])
+
+# Merge on all common columns except the renamed DATA columns
+merge_columns = ['time', 'DXY_dollar_index', 'Raungengi_Index', 'CP0451ISM086NEST', 'Branches', 'Country']
+
+merged_df = tonnes_df.merge(
+    fobvalue_df,
+    on=merge_columns,
+    how='outer'
 )
 
-# Drop the redundant observation_date column if present
-if 'observation_date' in merged.columns:
-    merged = merged.drop(columns=['observation_date'])
+# Reorder columns to have tonnes and fobvalue at the end
+column_order = merge_columns + ['tonnes', 'fobvalue']
+merged_df = merged_df[column_order]
 
-# Ensure the month format is yyyy-MM-dd. The `time` column already appears in that format in source files.
-# If needed, we could parse and format, but we'll assume source format is correct per attachments.
+# Save to new file
+merged_df.to_csv('data/cleaned/AL_TOTAL_v2_combined.csv', index=False)
 
-# Write to a new file to avoid permission errors on the original
-out_path = 'data/cleaned/AL_TOTAL_merged.csv'
-merged.to_csv(out_path, index=False)
-
-print(f'Wrote: {out_path}')
-print(f'Total rows: {len(merged)}')
-if 'CP0451ISM086NEST' in merged.columns:
-    print('Non-null CP0451ISM086NEST count:', merged['CP0451ISM086NEST'].notna().sum())
-else:
-    print('Column CP0451ISM086NEST not found in merged output')
+print(f"Tonnes shape: {tonnes_df.shape}")
+print(f"Fobvalue shape: {fobvalue_df.shape}")
+print(f"Combined shape: {merged_df.shape}")
+print(f"\nFirst few rows:")
+print(merged_df.head())
+print(f"\nSaved to: data/cleaned/AL_TOTAL_v2_combined.csv")
