@@ -53,7 +53,7 @@ navbar = dbc.Navbar(
             html.A(
                 dbc.Row(
                     [
-                        dbc.Col(html.Img(src="https.cdn-icons-png.flaticon.com/512/2170/2170316.png", height="30px")),
+                        dbc.Col(html.Img(src="https://cdn-icons-png.flaticon.com/512/2170/2170316.png", height="30px")),
                         dbc.Col(dbc.NavbarBrand("Icelandic Export Data & Predictions")),
                     ],
                     align="center",
