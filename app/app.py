@@ -15,27 +15,26 @@ import os
 debug = True
 
 
-# --- 1. LOAD PRE-COMPUTED DATA ---
+# --- LOAD HISTORICAL DATA AND PREDICTIONS ---
 try:
-    ALL_FORECASTS = pd.read_parquet('app/precomputed_forecasts.parquet')
-    with open('app/baseline_shap_plots.json', 'r') as f:
-        SHAP_PLOTS = json.load(f)
-except FileNotFoundError:
+    HISTORICAL_DATA = pd.read_parquet('../historical_data.parquet')
+    ALL_PREDICTIONS = pd.read_parquet('../all_predictions.parquet')
+    
+    # Combine historical and predictions for easy filtering
+    COMBINED_DATA = pd.concat([HISTORICAL_DATA, ALL_PREDICTIONS], ignore_index=True)
+    
+    # Get unique countries and branches
+    ALL_COUNTRIES = sorted(COMBINED_DATA['Country'].dropna().unique().tolist())
+    ALL_BRANCHES = sorted(COMBINED_DATA['Branches'].dropna().unique().tolist())
+    
+    print(f"Loaded {len(HISTORICAL_DATA)} historical records and {len(ALL_PREDICTIONS)} predictions")
+    print(f"Available countries: {len(ALL_COUNTRIES)}, Available branches: {len(ALL_BRANCHES)}")
+except FileNotFoundError as e:
     print("="*50)
-    print("ERROR: 'precomputed_forecasts.parquet' or 'baseline_shap_plots.json' not found.")
-    print("Please run 'python precompute.py' first!")
+    print(f"ERROR: Required data files not found: {e}")
+    print("Please ensure 'historical_data.parquet' and 'all_predictions.parquet' exist.")
     print("="*50)
     exit()
-
-# Extract scenario levels from the loaded data
-SECTORS = ALL_FORECASTS[ALL_FORECASTS['sector'].notna()]['sector'].unique()
-SCENARIO_LEVELS = {
-    'rate_mod': sorted(ALL_FORECASTS['rate_mod'].dropna().unique()),
-    'oil_mod': sorted(ALL_FORECASTS['oil_mod'].dropna().unique()),
-    'wage_mod': sorted(ALL_FORECASTS['wage_mod'].dropna().unique()),
-    'sector_mod_1': sorted(ALL_FORECASTS['sector_mod_1'].dropna().unique()),
-    'sector_mod_2': sorted(ALL_FORECASTS['sector_mod_2'].dropna().unique()),
-}
 
 # --- Initialize the Dash App ---
 # REMOVED the first, incorrect app = Dash(__name__)
@@ -55,7 +54,7 @@ navbar = dbc.Navbar(
                 dbc.Row(
                     [
                         dbc.Col(html.Img(src="https.cdn-icons-png.flaticon.com/512/2170/2170316.png", height="30px")),
-                        dbc.Col(dbc.NavbarBrand("Icelandic Economic Simulator")),
+                        dbc.Col(dbc.NavbarBrand("Icelandic Export Data & Predictions")),
                     ],
                     align="center",
                     className="g-0",
@@ -70,61 +69,29 @@ navbar = dbc.Navbar(
     className="mb-4",
 )
 
-# --- Helper function to create RadioItems ---
-def create_radio_options(values, unit='%'):
-    """Helper to create labels for radio buttons."""
-    # Use 'Baseline' for 0.0, and add units
-    return [
-        {"label": f"{v:+.1f}{unit}" if v != 0.0 else "Baseline (0.0%)", "value": v}
-        for v in values
-    ]
-
 sidebar = dbc.Col(
     [
         dbc.Card(
             dbc.CardBody([
-                html.H4(html.I(className="fa-solid fa-industry me-2"), "1. Select Sector"),
-                dcc.Dropdown(id='sector-dropdown', options=SECTORS, value=SECTORS[0], clearable=False, className='dark-dropdown'),
-            ]),
-            className="sidebar-card",
-        ),
-        dbc.Card(
-            dbc.CardBody([
-                html.H4(html.I(className="fa-solid fa-globe me-2"), "2. Macro-Economic Scenarios"),
+                html.H4(html.I(className="fa-solid fa-flag me-2"), "Select Export Data"),
                 
-                html.Label("Central Bank Rate Scenario", className="form-label"),
-                dbc.RadioItems(
-                    id='rate-radio',
-                    options=create_radio_options(SCENARIO_LEVELS['rate_mod']),
-                    value=0.0,
-                    inline=True, # <-- CHANGED
-                    labelClassName="me-3", # margin
+                html.Label("Country", className="form-label"),
+                dcc.Dropdown(
+                    id='country-dropdown',
+                    options=[{'label': country, 'value': country} for country in ALL_COUNTRIES],
+                    value=ALL_COUNTRIES[0] if ALL_COUNTRIES else None,
+                    clearable=False,
+                    className='dark-dropdown'
                 ),
                 
-                html.Label("Brent Oil Price Scenario", className="form-label mt-3"),
-                dbc.RadioItems(
-                    id='oil-radio',
-                    options=create_radio_options(SCENARIO_LEVELS['oil_mod']),
-                    value=0.0,
-                    inline=True, # <-- CHANGED
-                    labelClassName="me-3",
+                html.Label("Branch / Product Category", className="form-label mt-3"),
+                dcc.Dropdown(
+                    id='branch-dropdown',
+                    options=[],  # Will be populated dynamically
+                    value=None,
+                    clearable=False,
+                    className='dark-dropdown'
                 ),
-
-                html.Label("Wage Index Scenario", className="form-label mt-3"),
-                dbc.RadioItems(
-                    id='wage-radio',
-                    options=create_radio_options(SCENARIO_LEVELS['wage_mod']),
-                    value=0.0,
-                    inline=True, # <-- CHANGED
-                    labelClassName="me-3",
-                ),
-            ]),
-            className="sidebar-card",
-        ),
-        dbc.Card(
-            dbc.CardBody([
-                html.H4(html.I(className="fa-solid fa-sliders me-2"), "3. Sectoral Scenarios"),
-                html.Div(id='sector-levers-container'), # Dynamic radio items will be injected here
             ]),
             className="sidebar-card",
         ),
@@ -136,7 +103,7 @@ main_content = dbc.Col(
     dbc.Tabs(id='main-tabs', children=[
         
         dbc.Tab(
-            label="📈 Forecast & Scenario",
+            label="📈 Time Series",
             tab_id="tab-forecast",
             children=[
                 dcc.Graph(id='main-forecast-chart', figure={'layout': {'template': 'plotly_dark'}}, style={'height': '70vh'})
@@ -144,19 +111,49 @@ main_content = dbc.Col(
         ),
         
         dbc.Tab(
-            label="🔍 Baseline Explainability",
-            tab_id="tab-explain",
+            label="📊 Prediction Breakdown",
+            tab_id="tab-export",
             children=[
                 html.Div(className='mt-3', children=[
-                    dbc.Alert("Explainability is shown for the 'Baseline' (all 0.0) scenario.", color="info"),
-                    html.H4("Global Feature Importance (Baseline)"),
-                    html.Div(
-                        html.Img(id='shap-global-plot', style={'width': '100%'}),
-                        style={'backgroundColor': 'white', 'padding': '10px', 'borderRadius': '5px'}
+                    dcc.Graph(id='export-chart', figure={'layout': {'template': 'plotly_dark'}}, style={'height': '70vh'})
+                ])
+            ]
+        ),
+        
+        dbc.Tab(
+            label="🎯 Model Accuracy",
+            tab_id="tab-accuracy",
+            children=[
+                html.Div(className='mt-3', children=[
+                    dcc.Graph(id='accuracy-chart', figure={'layout': {'template': 'plotly_dark'}}, style={'height': '70vh'})
+                ])
+            ]
+        ),
+        
+        dbc.Tab(
+            label="📉 Residuals Analysis",
+            tab_id="tab-residuals",
+            children=[
+                html.Div(className='mt-3', children=[
+                    dcc.Graph(id='residuals-chart', figure={'layout': {'template': 'plotly_dark'}}, style={'height': '70vh'})
+                ])
+            ]
+        ),
+        
+        dbc.Tab(
+            label="🌍 Country Comparison",
+            tab_id="tab-comparison",
+            children=[
+                html.Div(className='mt-3', children=[
+                    html.Label("Select up to 5 countries to compare:", className="form-label"),
+                    dcc.Dropdown(
+                        id='comparison-countries',
+                        options=[{'label': country, 'value': country} for country in ALL_COUNTRIES],
+                        value=[ALL_COUNTRIES[0]] if ALL_COUNTRIES else [],
+                        multi=True,
+                        className='dark-dropdown mb-3'
                     ),
-                    html.Hr(),
-                    html.H4("Local Forecast Explanation (Baseline, Jan 2025)"),
-                    html.Img(id='shap-local-plot', style={'width': '100%'})
+                    dcc.Graph(id='comparison-chart', figure={'layout': {'template': 'plotly_dark'}}, style={'height': '60vh'})
                 ])
             ]
         ),
@@ -175,92 +172,114 @@ app.layout = html.Div([
 
 # --- == Callbacks == ---
 
-# Callback 1: Update Sector-Specific *RadioItems*
+# Callback 0: Update Branch dropdown based on selected Country
 @app.callback(
-    Output('sector-levers-container', 'children'),
-    Input('sector-dropdown', 'value')
+    Output('branch-dropdown', 'options'),
+    Output('branch-dropdown', 'value'),
+    Input('country-dropdown', 'value')
 )
-def update_sectoral_levers(selected_sector):
-    if not selected_sector:
-        return []
-
-    # This maps the generic scenario name to a human-readable label
-    sector_label_map = {
-        "🐟 Cod Exports": {"mod1": "Icelandic Cod Quota", "mod2": "Norwegian/Russian Quota"},
-        "✈️ Tourism": {"mod1": "Airline Seat Capacity", "mod2": "EU Economic Sentiment"},
-        "🏭 Aluminum": {"mod1": "LME Aluminum Price", "mod2": "Carbon Credit Price"},
-    }
+def update_branch_dropdown(selected_country):
+    if not selected_country or COMBINED_DATA is None:
+        return [], None
     
-    labels = sector_label_map[selected_sector]
-
-    dynamic_components = [
-        html.Label(f"{labels['mod1']} Scenario", className="form-label"),
-        dbc.RadioItems(
-            id='sector-mod-1-radio', 
-            options=create_radio_options(SCENARIO_LEVELS['sector_mod_1']),
-            value=0.0,
-            inline=True, # <-- CHANGED
-            labelClassName="me-3",
-        ),
-        
-        html.Label(f"{labels['mod2']} Scenario", className="form-label mt-3"),
-        dbc.RadioItems(
-            id='sector-mod-2-radio', 
-            options=create_radio_options(SCENARIO_LEVELS['sector_mod_2']),
-            value=0.0,
-            inline=True, # <-- CHANGED
-            labelClassName="me-3",
-        ),
-        html.Br()
-    ]
+    # Filter branches that exist for the selected country
+    filtered_branches = COMBINED_DATA[COMBINED_DATA['Country'] == selected_country]['Branches'].dropna().unique()
+    branch_options = [{'label': branch, 'value': branch} for branch in sorted(filtered_branches)]
     
-    return dynamic_components
+    # Set the first branch as default value
+    default_value = sorted(filtered_branches)[0] if len(filtered_branches) > 0 else None
+    
+    return branch_options, default_value
 
-# Callback 2: Update Main Chart based on RadioItem Filters
+# Callback 1: Update Main Chart based on Country/Branch selection
 @app.callback(
     Output('main-forecast-chart', 'figure'),
-    Input('sector-dropdown', 'value'),
-    Input('rate-radio', 'value'),
-    Input('oil-radio', 'value'),
-    Input('wage-radio', 'value'),
-    Input('sector-mod-1-radio', 'value'),
-    Input('sector-mod-2-radio', 'value')
+    Input('country-dropdown', 'value'),
+    Input('branch-dropdown', 'value')
 )
-def update_chart_from_scenarios(sector, rate_mod, oil_mod, wage_mod, mod_1, mod_2):
+def update_chart_from_scenarios(selected_country, selected_branch):
     
-    if mod_1 is None or mod_2 is None:
-        return go.Figure(layout={'template': 'plotly_dark'})
-
-    query_string = (
-        f"sector == '{sector}' & "
-        f"rate_mod == {rate_mod} & "
-        f"oil_mod == {oil_mod} & "
-        f"wage_mod == {wage_mod} & "
-        f"sector_mod_1 == {mod_1} & "
-        f"sector_mod_2 == {mod_2} & "
-        f"forecast_value.notna()"
-    )
-    whatif_df = ALL_FORECASTS.query(query_string)
-
-    baseline_query = (
-        f"sector == '{sector}' & "
-        f"rate_mod == 0.0 & oil_mod == 0.0 & wage_mod == 0.0 & "
-        f"sector_mod_1 == 0.0 & sector_mod_2 == 0.0 & "
-        f"forecast_value.notna()"
-    )
-    baseline_df = ALL_FORECASTS.query(baseline_query)
-    
-    hist_df = ALL_FORECASTS.query(f"sector == '{sector}' & historical_value.notna()")
-
     fig = go.Figure()
-    fig.add_trace(go.Scatter(x=hist_df['date'], y=hist_df['historical_value'], mode='lines', name=f'Historical', line=dict(color='gray', width=2, dash='dot')))
-    fig.add_trace(go.Scatter(x=baseline_df['date'], y=baseline_df['forecast_value'], mode='lines', name='Baseline Forecast', line=dict(color='#007BFF', dash='dash', width=3)))
-    fig.add_trace(go.Scatter(x=whatif_df['date'], y=whatif_df['forecast_value'], mode='lines+markers', name='Selected Scenario', line=dict(color='#FF006E', width=4), marker=dict(size=5)))
+    
+    if not selected_country or not selected_branch:
+        fig.update_layout(
+            title="Please select a Country and Branch",
+            template="plotly_dark",
+            paper_bgcolor='rgba(0,0,0,0)',
+            plot_bgcolor='rgba(0,0,0,0)'
+        )
+        return fig
+    
+    # Add historical data
+    historical_filtered = HISTORICAL_DATA[
+        (HISTORICAL_DATA['Country'] == selected_country) & 
+        (HISTORICAL_DATA['Branches'] == selected_branch)
+    ].copy()
+    
+    # Add predictions
+    predictions_filtered = ALL_PREDICTIONS[
+        (ALL_PREDICTIONS['Country'] == selected_country) & 
+        (ALL_PREDICTIONS['Branches'] == selected_branch)
+    ].copy()
+    
+    if not predictions_filtered.empty:
+        predictions_filtered['timestamp'] = pd.to_datetime(predictions_filtered['timestamp'])
+        predictions_filtered = predictions_filtered.sort_values('timestamp')
+        
+        # Separate by prediction type
+        validation = predictions_filtered[predictions_filtered['prediction_type'] == 'Validation']
+        future = predictions_filtered[predictions_filtered['prediction_type'] == 'Future']
+        
+        # Combine historical data with validation actual values for continuous line
+        actual_data = []
+        
+        if not historical_filtered.empty:
+            historical_filtered['timestamp'] = pd.to_datetime(historical_filtered['timestamp'])
+            actual_data.append(historical_filtered[['timestamp', 'y_true']])
+        
+        if not validation.empty:
+            actual_data.append(validation[['timestamp', 'y_true']])
+        
+        if actual_data:
+            combined_actual = pd.concat(actual_data, ignore_index=True)
+            combined_actual = combined_actual.sort_values('timestamp')
+            
+            fig.add_trace(go.Scatter(
+                x=combined_actual['timestamp'], 
+                y=combined_actual['y_true'], 
+                mode='lines', 
+                name='Historical Data', 
+                line=dict(color='#808080', width=2, dash='dot'),
+                opacity=0.7
+            ))
+        
+        # Add validation predictions
+        if not validation.empty:
+            fig.add_trace(go.Scatter(
+                x=validation['timestamp'],
+                y=validation['y_pred'],
+                mode='lines+markers',
+                name='Validation Prediction',
+                line=dict(color='#FFD700', width=2),
+                marker=dict(size=4)
+            ))
+        
+        if not future.empty:
+            fig.add_trace(go.Scatter(
+                x=future['timestamp'],
+                y=future['y_pred'],
+                mode='lines+markers',
+                name='Future Forecast',
+                line=dict(color='#00FF00', width=3),
+                marker=dict(size=6)
+            ))
+    
+    title_text = f"{selected_country}: {selected_branch}"
     
     fig.update_layout(
-        title=f"Forecast for {sector.split(' ')[1]}",
+        title=title_text,
         xaxis_title="Date",
-        yaxis_title="Simulated Value",
+        yaxis_title="Value",
         template="plotly_dark",
         legend_title="Series",
         paper_bgcolor='rgba(0,0,0,0)',
@@ -269,20 +288,290 @@ def update_chart_from_scenarios(sector, rate_mod, oil_mod, wage_mod, mod_1, mod_
     
     return fig
 
-# Callback 3: Update SHAP plots based on selected sector
+# Callback 2: Update Export Chart based on Country and Branch
 @app.callback(
-    Output('shap-global-plot', 'src'),
-    Output('shap-local-plot', 'src'),
-    Input('sector-dropdown', 'value')
+    Output('export-chart', 'figure'),
+    Input('country-dropdown', 'value'),
+    Input('branch-dropdown', 'value')
 )
-def update_shap_plots(selected_sector):
-    if not selected_sector or selected_sector not in SHAP_PLOTS:
-        return "", ""
-        
-    global_plot_src = SHAP_PLOTS[selected_sector]['global_plot_src']
-    local_plot_src = SHAP_PLOTS[selected_sector]['local_plot_src']
+def update_export_chart(selected_country, selected_branch):
+    if not selected_country or not selected_branch:
+        return go.Figure(layout={'template': 'plotly_dark', 'title': 'No data available'})
     
-    return global_plot_src, local_plot_src
+    # Get historical data
+    historical_filtered = HISTORICAL_DATA[
+        (HISTORICAL_DATA['Country'] == selected_country) & 
+        (HISTORICAL_DATA['Branches'] == selected_branch)
+    ].copy()
+    
+    # Get predictions
+    predictions_filtered = ALL_PREDICTIONS[
+        (ALL_PREDICTIONS['Country'] == selected_country) & 
+        (ALL_PREDICTIONS['Branches'] == selected_branch)
+    ].copy()
+    
+    if historical_filtered.empty and predictions_filtered.empty:
+        return go.Figure(layout={'template': 'plotly_dark', 'title': 'No data for selected filters'})
+    
+    # Create figure
+    fig = go.Figure()
+    
+    # Add predictions
+    if not predictions_filtered.empty:
+        predictions_filtered['timestamp'] = pd.to_datetime(predictions_filtered['timestamp'])
+        predictions_filtered = predictions_filtered.sort_values('timestamp')
+        
+        # Separate by prediction type
+        validation = predictions_filtered[predictions_filtered['prediction_type'] == 'Validation']
+        future = predictions_filtered[predictions_filtered['prediction_type'] == 'Future']
+        
+        # Combine historical data with validation actual values for continuous line
+        actual_data = []
+        
+        if not historical_filtered.empty:
+            historical_filtered['timestamp'] = pd.to_datetime(historical_filtered['timestamp'])
+            actual_data.append(historical_filtered[['timestamp', 'y_true']])
+        
+        if not validation.empty:
+            actual_data.append(validation[['timestamp', 'y_true']])
+        
+        if actual_data:
+            combined_actual = pd.concat(actual_data, ignore_index=True)
+            combined_actual = combined_actual.sort_values('timestamp')
+            
+            fig.add_trace(go.Scatter(
+                x=combined_actual['timestamp'],
+                y=combined_actual['y_true'],
+                mode='lines',
+                name='Actual Data',
+                line=dict(color='#00D9FF', width=3),
+                opacity=0.8
+            ))
+        
+        # Add validation predictions
+        if not validation.empty:
+            fig.add_trace(go.Scatter(
+                x=validation['timestamp'],
+                y=validation['y_pred'],
+                mode='lines+markers',
+                name='Validation Prediction',
+                line=dict(color='#FFD700', width=2, dash='dash'),
+                marker=dict(size=4)
+            ))
+        
+        if not future.empty:
+            fig.add_trace(go.Scatter(
+                x=future['timestamp'],
+                y=future['y_pred'],
+                mode='lines+markers',
+                name='Future Forecast',
+                line=dict(color='#00FF00', width=3),
+                marker=dict(size=6)
+            ))
+    
+    fig.update_layout(
+        title=f"Export Data & Predictions: {selected_country} - {selected_branch}",
+        xaxis=dict(title="Date"),
+        yaxis=dict(title="Value"),
+        template="plotly_dark",
+        legend=dict(x=0.01, y=0.99),
+        hovermode='x unified',
+        paper_bgcolor='rgba(0,0,0,0)',
+        plot_bgcolor='rgba(0,0,0,0)'
+    )
+    
+    return fig
+
+# Callback 3: Model Accuracy Chart
+@app.callback(
+    Output('accuracy-chart', 'figure'),
+    Input('country-dropdown', 'value'),
+    Input('branch-dropdown', 'value')
+)
+def update_accuracy_chart(selected_country, selected_branch):
+    if not selected_country or not selected_branch:
+        return go.Figure(layout={'template': 'plotly_dark', 'title': 'Please select a Country and Branch'})
+    
+    # Get predictions with actual values for comparison
+    predictions_filtered = ALL_PREDICTIONS[
+        (ALL_PREDICTIONS['Country'] == selected_country) & 
+        (ALL_PREDICTIONS['Branches'] == selected_branch) &
+        (ALL_PREDICTIONS['y_true'].notna())
+    ].copy()
+    
+    if predictions_filtered.empty:
+        return go.Figure(layout={'template': 'plotly_dark', 'title': 'No validation/test data available'})
+    
+    predictions_filtered['timestamp'] = pd.to_datetime(predictions_filtered['timestamp'])
+    predictions_filtered = predictions_filtered.sort_values('timestamp')
+    
+    # Create scatter plot: actual vs predicted
+    fig = go.Figure()
+    
+    # Add perfect prediction line
+    min_val = min(predictions_filtered['y_true'].min(), predictions_filtered['y_pred'].min())
+    max_val = max(predictions_filtered['y_true'].max(), predictions_filtered['y_pred'].max())
+    
+    fig.add_trace(go.Scatter(
+        x=[min_val, max_val],
+        y=[min_val, max_val],
+        mode='lines',
+        name='Perfect Prediction',
+        line=dict(color='gray', width=2, dash='dash'),
+        showlegend=True
+    ))
+    
+    # Separate by prediction type
+    for pred_type, color in [('Validation', '#FFD700')]:
+        subset = predictions_filtered[predictions_filtered['prediction_type'] == pred_type]
+        if not subset.empty:
+            fig.add_trace(go.Scatter(
+                x=subset['y_true'],
+                y=subset['y_pred'],
+                mode='markers',
+                name=pred_type,
+                marker=dict(size=8, color=color, opacity=0.6),
+                text=subset['timestamp'].dt.strftime('%Y-%m'),
+                hovertemplate='<b>%{text}</b><br>Actual: %{x:.2f}<br>Predicted: %{y:.2f}<extra></extra>'
+            ))
+    
+    fig.update_layout(
+        title=f"Model Accuracy: {selected_country} - {selected_branch}",
+        xaxis=dict(title="Actual Value"),
+        yaxis=dict(title="Predicted Value"),
+        template="plotly_dark",
+        paper_bgcolor='rgba(0,0,0,0)',
+        plot_bgcolor='rgba(0,0,0,0)',
+        hovermode='closest'
+    )
+    
+    return fig
+
+# Callback 4: Residuals Analysis Chart
+@app.callback(
+    Output('residuals-chart', 'figure'),
+    Input('country-dropdown', 'value'),
+    Input('branch-dropdown', 'value')
+)
+def update_residuals_chart(selected_country, selected_branch):
+    if not selected_country or not selected_branch:
+        return go.Figure(layout={'template': 'plotly_dark', 'title': 'Please select a Country and Branch'})
+    
+    # Get predictions with actual values
+    predictions_filtered = ALL_PREDICTIONS[
+        (ALL_PREDICTIONS['Country'] == selected_country) & 
+        (ALL_PREDICTIONS['Branches'] == selected_branch) &
+        (ALL_PREDICTIONS['y_true'].notna())
+    ].copy()
+    
+    if predictions_filtered.empty:
+        return go.Figure(layout={'template': 'plotly_dark', 'title': 'No validation/test data available'})
+    
+    predictions_filtered['timestamp'] = pd.to_datetime(predictions_filtered['timestamp'])
+    predictions_filtered = predictions_filtered.sort_values('timestamp')
+    predictions_filtered['residual'] = predictions_filtered['y_true'] - predictions_filtered['y_pred']
+    
+    fig = go.Figure()
+    
+    # Add zero line
+    fig.add_hline(y=0, line_dash="dash", line_color="gray", annotation_text="Zero Error")
+    
+    # Plot residuals by prediction type
+    for pred_type, color in [('Validation', '#FFD700')]:
+        subset = predictions_filtered[predictions_filtered['prediction_type'] == pred_type]
+        if not subset.empty:
+            fig.add_trace(go.Scatter(
+                x=subset['timestamp'],
+                y=subset['residual'],
+                mode='markers+lines',
+                name=pred_type,
+                marker=dict(size=6, color=color),
+                line=dict(color=color, width=1)
+            ))
+    
+    fig.update_layout(
+        title=f"Prediction Residuals: {selected_country} - {selected_branch}",
+        xaxis=dict(title="Date"),
+        yaxis=dict(title="Residual (Actual - Predicted)"),
+        template="plotly_dark",
+        paper_bgcolor='rgba(0,0,0,0)',
+        plot_bgcolor='rgba(0,0,0,0)',
+        hovermode='x unified'
+    )
+    
+    return fig
+
+# Callback 5: Country Comparison Chart
+@app.callback(
+    Output('comparison-chart', 'figure'),
+    Input('comparison-countries', 'value'),
+    Input('branch-dropdown', 'value')
+)
+def update_comparison_chart(selected_countries, selected_branch):
+    if not selected_countries or not selected_branch:
+        return go.Figure(layout={'template': 'plotly_dark', 'title': 'Please select countries and a branch'})
+    
+    # Limit to 5 countries
+    if len(selected_countries) > 5:
+        selected_countries = selected_countries[:5]
+    
+    fig = go.Figure()
+    
+    colors = ['#00D9FF', '#FF006E', '#00FF00', '#FFD700', '#FF8C00']
+    
+    for idx, country in enumerate(selected_countries):
+        # Get historical data
+        hist_data = HISTORICAL_DATA[
+            (HISTORICAL_DATA['Country'] == country) & 
+            (HISTORICAL_DATA['Branches'] == selected_branch)
+        ].copy()
+        
+        if not hist_data.empty:
+            hist_data['timestamp'] = pd.to_datetime(hist_data['timestamp'])
+            hist_data = hist_data.sort_values('timestamp')
+            
+            fig.add_trace(go.Scatter(
+                x=hist_data['timestamp'],
+                y=hist_data['y_true'],
+                mode='lines',
+                name=country,
+                line=dict(color=colors[idx % len(colors)], width=2),
+                opacity=0.8
+            ))
+        
+        # Get forecast data
+        forecast_data = ALL_PREDICTIONS[
+            (ALL_PREDICTIONS['Country'] == country) & 
+            (ALL_PREDICTIONS['Branches'] == selected_branch) &
+            (ALL_PREDICTIONS['prediction_type'] == 'Future')
+        ].copy()
+        
+        if not forecast_data.empty:
+            forecast_data['timestamp'] = pd.to_datetime(forecast_data['timestamp'])
+            forecast_data = forecast_data.sort_values('timestamp')
+            
+            fig.add_trace(go.Scatter(
+                x=forecast_data['timestamp'],
+                y=forecast_data['y_pred'],
+                mode='lines',
+                name=f'{country} (Forecast)',
+                line=dict(color=colors[idx % len(colors)], width=2, dash='dash'),
+                opacity=0.6,
+                showlegend=True
+            ))
+    
+    fig.update_layout(
+        title=f"Country Comparison: {selected_branch}",
+        xaxis=dict(title="Date"),
+        yaxis=dict(title="Value"),
+        template="plotly_dark",
+        paper_bgcolor='rgba(0,0,0,0)',
+        plot_bgcolor='rgba(0,0,0,0)',
+        hovermode='x unified',
+        legend=dict(x=0.01, y=0.99)
+    )
+    
+    return fig
 
 
 
