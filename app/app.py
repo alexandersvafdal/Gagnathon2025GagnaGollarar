@@ -17,8 +17,8 @@ debug = True
 
 # --- 1. LOAD PRE-COMPUTED DATA ---
 try:
-    ALL_FORECASTS = pd.read_parquet("precomputed_forecasts.parquet")
-    with open('baseline_shap_plots.json', 'r') as f:
+    ALL_FORECASTS = pd.read_parquet('app/precomputed_forecasts.parquet')
+    with open('app/baseline_shap_plots.json', 'r') as f:
         SHAP_PLOTS = json.load(f)
 except FileNotFoundError:
     print("="*50)
