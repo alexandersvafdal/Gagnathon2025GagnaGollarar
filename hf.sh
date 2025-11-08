@@ -17,6 +17,7 @@ app_port: 8050
 EOF
 cp -r ./app ./Dockerfile ./requirements.txt ./README.md hf/
 cd hf
+git config --global init.defaultBranch main
 git init
 git config --local user.email "action@github.com"
 git config --local user.name "GitHub Action"

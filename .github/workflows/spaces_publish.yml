@@ -18,4 +18,4 @@ jobs:
         working-directory: hf
         env:
           HF_TOKEN: ${{ secrets.HF_TOKEN }}
-        run: git push --force-with-lease https://MaxAtoms:$HF_TOKEN@huggingface.co/spaces/plotly/dash-app-template main
+        run: git push --force https://MaxAtoms:$HF_TOKEN@huggingface.co/spaces/MaxAtoms/Datathon-2025 main
