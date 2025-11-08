@@ -17,8 +17,8 @@ debug = True
 
 # --- LOAD HISTORICAL DATA AND PREDICTIONS ---
 try:
-    HISTORICAL_DATA = pd.read_parquet('../historical_data.parquet')
-    ALL_PREDICTIONS = pd.read_parquet('../all_predictions.parquet')
+    HISTORICAL_DATA = pd.read_parquet('app/historical_data.parquet')
+    ALL_PREDICTIONS = pd.read_parquet('app/all_predictions.parquet')
     
     # Combine historical and predictions for easy filtering
     COMBINED_DATA = pd.concat([HISTORICAL_DATA, ALL_PREDICTIONS], ignore_index=True)
@@ -64,8 +64,8 @@ navbar = dbc.Navbar(
             ),
         ]
     ),
-    color="dark",
-    dark=True,
+    #color="dark",
+    #dark=True,
     className="mb-4",
 )
 
