@@ -228,18 +228,18 @@ dashboard_sidebar = dbc.Col(
             dbc.CardBody([
                 html.H4([html.I(className="fa-solid fa-flag me-2"), " Select Export Data"], className="card-title"),
                 html.Hr(),
-                html.Label("Country", className="form-label"),
+                html.Label("Branch / Product Category", className="form-label"),
                 dcc.Dropdown(
-                    id='country-dropdown',
-                    options=[{'label': country, 'value': country} for country in ALL_COUNTRIES],
-                    value=ALL_COUNTRIES[0] if ALL_COUNTRIES else None,
+                    id='branch-dropdown',
+                    options=[{'label': branch, 'value': branch} for branch in ALL_BRANCHES],
+                    value=ALL_BRANCHES[0] if ALL_BRANCHES else None,
                     clearable=False,
                     className='custom-dropdown'
                 ),
                 
-                html.Label("Branch / Product Category", className="form-label mt-3"),
+                html.Label("Country", className="form-label mt-3"),
                 dcc.Dropdown(
-                    id='branch-dropdown',
+                    id='country-dropdown',
                     options=[],
                     value=None,
                     clearable=False,
@@ -669,17 +669,18 @@ def update_overview_tab(selected_year, selected_sector):
 
 # --- Callbacks for "Single Series Analysis" Tab ---
 @app.callback(
-    Output('branch-dropdown', 'options'),
-    Output('branch-dropdown', 'value'),
-    Input('country-dropdown', 'value')
+    Output('country-dropdown', 'options'),
+    Output('country-dropdown', 'value'),
+    Input('branch-dropdown', 'value')
 )
-def update_branch_dropdown(selected_country):
-    if not selected_country or COMBINED_DATA is None:
+def update_country_dropdown(selected_branch):
+    if not selected_branch or COMBINED_DATA is None:
         return [], None
-    filtered_branches = COMBINED_DATA[COMBINED_DATA['Country'] == selected_country]['Branches'].dropna().unique()
-    branch_options = [{'label': branch, 'value': branch} for branch in sorted(filtered_branches)]
-    default_value = sorted(filtered_branches)[0] if len(filtered_branches) > 0 else None
-    return branch_options, default_value
+    filtered_countries = COMBINED_DATA[COMBINED_DATA['Branches'] == selected_branch]['Country'].dropna().unique()
+    country_options = [{'label': 'All Countries', 'value': 'ALL'}]
+    country_options.extend([{'label': country, 'value': country} for country in sorted(filtered_countries)])
+    default_value = 'ALL'  # Default to "All Countries"
+    return country_options, default_value
 
 @app.callback(
     Output('exchange-rate-slider', 'value'),
@@ -702,17 +703,29 @@ def reset_sliders(n_clicks):
     Input('capacity-slider', 'value')
 )
 def update_main_forecast_chart(selected_country, selected_branch, exchange_rate, inflation, demand, capacity):
-    if not selected_country or not selected_branch:
-        return create_empty_fig("Please select a Country and Branch")
+    if not selected_branch:
+        return create_empty_fig("Please select a Branch")
     
     fig = go.Figure()
     
-    dff_hist = HISTORICAL_DATA[
-        (HISTORICAL_DATA['Country'] == selected_country) & (HISTORICAL_DATA['Branches'] == selected_branch)
-    ].copy()
-    dff_preds = ALL_PREDICTIONS[
-        (ALL_PREDICTIONS['Country'] == selected_country) & (ALL_PREDICTIONS['Branches'] == selected_branch)
-    ].copy()
+    # Filter by branch, optionally by country
+    if selected_country and selected_country != 'ALL':
+        dff_hist = HISTORICAL_DATA[
+            (HISTORICAL_DATA['Country'] == selected_country) & (HISTORICAL_DATA['Branches'] == selected_branch)
+        ].copy()
+        dff_preds = ALL_PREDICTIONS[
+            (ALL_PREDICTIONS['Country'] == selected_country) & (ALL_PREDICTIONS['Branches'] == selected_branch)
+        ].copy()
+    else:
+        # Aggregate all countries for this branch
+        dff_hist = HISTORICAL_DATA[HISTORICAL_DATA['Branches'] == selected_branch].copy()
+        dff_preds = ALL_PREDICTIONS[ALL_PREDICTIONS['Branches'] == selected_branch].copy()
+        
+        # Group by timestamp to aggregate values
+        if not dff_hist.empty:
+            dff_hist = dff_hist.groupby('timestamp').agg({'y_true': 'sum'}).reset_index()
+        if not dff_preds.empty:
+            dff_preds = dff_preds.groupby(['timestamp', 'prediction_type']).agg({'y_true': 'sum', 'y_pred': 'sum'}).reset_index()
     
     if dff_preds.empty and dff_hist.empty:
         return create_empty_fig("No data available for this selection")
@@ -776,7 +789,11 @@ def update_main_forecast_chart(selected_country, selected_branch, exchange_rate,
                     line=dict(color=COLOR_ACCENT_PURPLE, width=3)
                 ))
     
-    title_text = f"Forecast: {selected_country} - {selected_branch}"
+    title_text = f"Forecast: {selected_branch}"
+    if selected_country and selected_country != 'ALL':
+        title_text = f"Forecast: {selected_country} - {selected_branch}"
+    else:
+        title_text += " (All Countries)"
     fig.update_layout(
         title=title_text, xaxis_title=None, yaxis_title="Value", template=PLOTLY_TEMPLATE,
         legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1, bgcolor='rgba(255,255,255,0.7)'),
@@ -790,14 +807,25 @@ def update_main_forecast_chart(selected_country, selected_branch, exchange_rate,
     Input('branch-dropdown', 'value')
 )
 def update_accuracy_chart(selected_country, selected_branch):
-    if not selected_country or not selected_branch:
-        return create_empty_fig("Select series to see accuracy")
+    if not selected_branch:
+        return create_empty_fig("Select branch to see accuracy")
     
-    predictions_filtered = ALL_PREDICTIONS[
-        (ALL_PREDICTIONS['Country'] == selected_country) & 
-        (ALL_PREDICTIONS['Branches'] == selected_branch) &
-        (ALL_PREDICTIONS['y_true'].notna())
-    ].copy()
+    if selected_country and selected_country != 'ALL':
+        predictions_filtered = ALL_PREDICTIONS[
+            (ALL_PREDICTIONS['Country'] == selected_country) & 
+            (ALL_PREDICTIONS['Branches'] == selected_branch) &
+            (ALL_PREDICTIONS['y_true'].notna())
+        ].copy()
+    else:
+        predictions_filtered = ALL_PREDICTIONS[
+            (ALL_PREDICTIONS['Branches'] == selected_branch) &
+            (ALL_PREDICTIONS['y_true'].notna())
+        ].copy()
+        # Aggregate by timestamp
+        predictions_filtered = predictions_filtered.groupby('timestamp').agg({
+            'y_true': 'sum',
+            'y_pred': 'sum'
+        }).reset_index()
     
     if predictions_filtered.empty:
         return create_empty_fig("No validation data to display")
@@ -834,14 +862,25 @@ def update_accuracy_chart(selected_country, selected_branch):
     Input('branch-dropdown', 'value')
 )
 def update_residuals_chart(selected_country, selected_branch):
-    if not selected_country or not selected_branch:
-        return create_empty_fig("Select series to see residuals")
+    if not selected_branch:
+        return create_empty_fig("Select branch to see residuals")
     
-    predictions_filtered = ALL_PREDICTIONS[
-        (ALL_PREDICTIONS['Country'] == selected_country) & 
-        (ALL_PREDICTIONS['Branches'] == selected_branch) &
-        (ALL_PREDICTIONS['y_true'].notna())
-    ].copy()
+    if selected_country and selected_country != 'ALL':
+        predictions_filtered = ALL_PREDICTIONS[
+            (ALL_PREDICTIONS['Country'] == selected_country) & 
+            (ALL_PREDICTIONS['Branches'] == selected_branch) &
+            (ALL_PREDICTIONS['y_true'].notna())
+        ].copy()
+    else:
+        predictions_filtered = ALL_PREDICTIONS[
+            (ALL_PREDICTIONS['Branches'] == selected_branch) &
+            (ALL_PREDICTIONS['y_true'].notna())
+        ].copy()
+        # Aggregate by timestamp
+        predictions_filtered = predictions_filtered.groupby('timestamp').agg({
+            'y_true': 'sum',
+            'y_pred': 'sum'
+        }).reset_index()
     
     if predictions_filtered.empty:
         return create_empty_fig("No validation data for residuals")
@@ -873,14 +912,25 @@ def update_residuals_chart(selected_country, selected_branch):
     Input('branch-dropdown', 'value')
 )
 def update_residuals_hist(selected_country, selected_branch):
-    if not selected_country or not selected_branch:
-        return create_empty_fig("Select series for histogram")
+    if not selected_branch:
+        return create_empty_fig("Select branch for histogram")
     
-    predictions_filtered = ALL_PREDICTIONS[
-        (ALL_PREDICTIONS['Country'] == selected_country) & 
-        (ALL_PREDICTIONS['Branches'] == selected_branch) &
-        (ALL_PREDICTIONS['y_true'].notna())
-    ].copy()
+    if selected_country and selected_country != 'ALL':
+        predictions_filtered = ALL_PREDICTIONS[
+            (ALL_PREDICTIONS['Country'] == selected_country) & 
+            (ALL_PREDICTIONS['Branches'] == selected_branch) &
+            (ALL_PREDICTIONS['y_true'].notna())
+        ].copy()
+    else:
+        predictions_filtered = ALL_PREDICTIONS[
+            (ALL_PREDICTIONS['Branches'] == selected_branch) &
+            (ALL_PREDICTIONS['y_true'].notna())
+        ].copy()
+        # Aggregate by timestamp
+        predictions_filtered = predictions_filtered.groupby('timestamp').agg({
+            'y_true': 'sum',
+            'y_pred': 'sum'
+        }).reset_index()
     
     if predictions_filtered.empty:
         return create_empty_fig("No validation data for histogram")
