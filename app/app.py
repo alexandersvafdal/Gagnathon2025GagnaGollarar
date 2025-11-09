@@ -789,13 +789,15 @@ def update_main_forecast_chart(selected_country, selected_branch, exchange_rate,
                     line=dict(color=COLOR_ACCENT_PURPLE, width=3)
                 ))
     
-    title_text = f"Forecast: {selected_branch}"
+    # Simple title: Branch * Country
     if selected_country and selected_country != 'ALL':
-        title_text = f"Forecast: {selected_country} - {selected_branch}"
+        title_text = f"Branch * Country"
     else:
-        title_text += " (All Countries)"
+        title_text = f"Branch * Country"
+    
     fig.update_layout(
-        title=title_text, xaxis_title=None, yaxis_title="Value", template=PLOTLY_TEMPLATE,
+        title=title_text, 
+        xaxis_title=None, yaxis_title="Value (M ISK)", template=PLOTLY_TEMPLATE,
         legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1, bgcolor='rgba(255,255,255,0.7)'),
         hovermode='x unified', margin=dict(t=50, b=10), transition_duration=500
     )
