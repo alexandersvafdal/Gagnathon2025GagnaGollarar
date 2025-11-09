@@ -1,84 +1,177 @@
-/* Use the theme's font for a consistent look */
-body, html {
-    font-family: "Lato", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
-    background-color: #0F2537 !important; /* Matches SUPERHERO theme background */
+/* --- == Global & Typography (Light Theme) == --- */
+body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+    background-color: #F8F9FA !important;
+    color: #495057 !important;
+    overflow-x: hidden;
 }
 
-/* --- Navbar Styling --- */
-.navbar-brand {
+h1, h2, h3, h4, h5, h6, .card-title {
     font-weight: 600;
+    color: #212529;
+}
+
+.form-label {
+    font-size: 0.8rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    color: #6C757D;
+    letter-spacing: 0.5px;
+}
+
+/* --- == Layout & Navbar == --- */
+.app-header {
     font-size: 1.5rem;
+    font-weight: 700;
+    color: #212529;
 }
 
-/* --- Sidebar Styling --- */
-.sidebar-card {
-    background-color: #1A3A52; /* Slightly lighter than the page bg */
-    border: none;
+.app-navbar {
+    background-color: #FFFFFF !important;
+    border-bottom: 1px solid #DEE2E6;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.04);
+}
+
+#sidebar {
+    padding-right: 15px;
+}
+
+#main-content {
+    padding-left: 15px;
+}
+
+/* --- == Card Components == --- */
+.sidebar-card,
+.graph-card {
+    background-color: #FFFFFF;
+    border: 1px solid #DEE2E6;
     border-radius: 8px;
-    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
     margin-bottom: 20px;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05);
 }
 
-.sidebar-card .form-label {
-    margin-top: 15px;
-    font-weight: 500;
+.sidebar-card .card-body {
+    padding: 25px;
 }
 
-/* --- NEW: Dark Dropdown Styling --- 
-This targets the dcc.Dropdown components
-*/
-.dark-dropdown .Select-control {
-    background-color: #2B3E50 !important; /* A slightly lighter bg for contrast */
-    border: 1px solid #4E5D6C !important;
+.graph-card .card-body {
+    padding: 10px;
 }
-.dark-dropdown .Select-value-label, .dark-dropdown .Select-placeholder {
-    color: #E9ECEF !important; /* Theme text color */
-}
-.dark-dropdown .Select-arrow {
-    border-color: #E9ECEF transparent transparent !important;
-}
-.dark-dropdown .Select-menu-outer {
-    background-color: #1A3A52 !important;
-    border: 1px solid #4E5D6C !important;
-}
-.dark-dropdown .Select-option {
-    background-color: #1A3A52;
-    color: #E9ECEF;
-}
-.dark-dropdown .Select-option.is-focused {
-    background-color: #4E5D6C !important; /* Theme primary color */
-    color: #FFFFFF !important;
-}
-/* --- End of New CSS --- */
 
+/* --- == Custom Tabs == --- */
+.main-tabs .nav-tabs {
+    border-bottom: 1px solid #DEE2E6;
+    padding-left: 20px;
+}
 
-/* --- Main Content Tabs --- */
-.nav-tabs {
-    border-bottom: 1px solid #4E5D6C;
+.main-tabs .nav-tabs .nav-link {
+    font-weight: 600;
+    color: #6C757D;
+    border: none;
+    border-bottom: 2px solid transparent;
+    padding: 12px 20px;
+    transition: all 0.2s ease-in-out;
 }
-.nav-tabs .nav-link {
-    font-weight: 500;
-    color: #ADB5BD; /* Inactive tab color */
-    border-bottom-left-radius: 0;
-    border-bottom-right-radius: 0;
+
+.main-tabs .nav-tabs .nav-link:hover {
+    color: #212529;
+    border-bottom: 2px solid #6C757D;
 }
-.nav-tabs .nav-link.active {
+
+.main-tabs .nav-tabs .nav-link.active {
+    color: #007BFF;
+    background-color: transparent !important;
+    border: none;
+    border-bottom: 2px solid #007BFF;
+}
+
+/* --- == Custom Light Dropdown (dcc.Dropdown) == --- */
+.custom-dropdown .Select-control {
+    background-color: #FFFFFF;
+    border: 1px solid #CED4DA;
+    border-radius: 6px;
+}
+
+.custom-dropdown .Select-input,
+.custom-dropdown .Select-value,
+.custom-dropdown .Select-placeholder {
+    color: #495057 !important;
+}
+
+.custom-dropdown .Select-value-label {
+    color: #495057 !important;
+}
+
+.custom-dropdown .Select-menu-outer {
+    background-color: #FFFFFF;
+    border: 1px solid #CED4DA;
+    border-radius: 6px;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05);
+}
+
+.custom-dropdown .Select-option {
+    background-color: #FFFFFF;
+    color: #495057;
+}
+
+.custom-dropdown .Select-option.is-focused {
+    background-color: #007BFF;
     color: #FFFFFF;
-    background-color: #1A3A52; /* Match the sidebar card bg */
-    border-color: #4E5D6C;
-    border-bottom-color: #1A3A52; /* Hide bottom border */
-}
-.tab-content {
-    background-color: #1A3A52;
-    border: 1px solid #4E5D6C;
-    border-top: none;
-    border-radius: 0 0 8px 8px;
-    padding: 20px;
-    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
 }
 
-#shap-global-plot, #shap-local-plot {
-    background-color: transparent;
-    border-radius: 5px;
-    margin-top: 10px;
+.custom-dropdown .Select-arrow {
+    border-color: #495057 transparent transparent !important;
+}
+
+/* --- == Custom Scrollbar (Light) == --- */
+::-webkit-scrollbar {
+    width: 8px;
+    height: 8px;
+}
+::-webkit-scrollbar-track {
+    background: #F1F1F1;
+}
+::-webkit-scrollbar-thumb {
+    background: #C1C1C1;
+    border-radius: 4px;
+}
+::-webkit-scrollbar-thumb:hover {
+    background: #A8A8A8;
+}
+/* --- == NEW KPI Card Styles == --- */
+.kpi-card-body {
+    padding: 20px;
+    position: relative;
+    min-height: 120px; /* Give cards a uniform height */
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+}
+
+.kpi-card-body .kpi-title {
+    font-size: 0.9rem;
+    font-weight: 600;
+    color: #6C757D; /* Muted gray text */
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    margin-bottom: 8px;
+}
+
+.kpi-card-body .kpi-value {
+    font-size: 1.75rem;
+    font-weight: 700;
+    color: #212529; /* Dark heading text */
+    line-height: 1.2;
+    margin-bottom: 0;
+}
+
+/* Specific styling for the Y/Y change */
+.kpi-card-body .kpi-value p {
+    font-size: 1.5rem;
+    font-weight: 700;
+    margin-bottom: 0;
+}
+.kpi-card-body .kpi-value .text-muted {
+    font-size: 0.9rem;
+    font-weight: 400;
 }
