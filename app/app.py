@@ -30,7 +30,7 @@ COMPARISON_COLORS = [COLOR_PRIMARY_BLUE, COLOR_VALIDATION_TEAL, COLOR_RESIDUAL_O
 PLOTLY_TEMPLATE = "plotly_white"
 
 # --- SCAN PREDICTION FILES ---
-PREDICTION_FOLDER = Path('perdictions')
+PREDICTION_FOLDER = Path('./app/predictions')
 PREDICTION_FILES = []
 if PREDICTION_FOLDER.exists():
     PREDICTION_FILES = sorted([f.name for f in PREDICTION_FOLDER.glob('*.parquet')])
@@ -45,11 +45,11 @@ else:
 
 # --- LOAD HISTORICAL DATA AND PREDICTIONS ---
 try:
-    HISTORICAL_DATA = pd.read_parquet('historical_data.parquet')
+    HISTORICAL_DATA = pd.read_parquet('./app/historical_data.parquet')
     
-    # Load default predictions from perdictions folder or use first available model
+    # Load default predictions from predictions folder or use first available model
     if DEFAULT_PREDICTION_VALUE:
-        ALL_PREDICTIONS = pd.read_parquet(f'perdictions/{DEFAULT_PREDICTION_VALUE}')
+        ALL_PREDICTIONS = pd.read_parquet(f'./app/predictions/{DEFAULT_PREDICTION_VALUE}')
     else:
         ALL_PREDICTIONS = pd.DataFrame()
     
@@ -549,7 +549,7 @@ def get_predictions_and_combined(prediction_filename):
     """Load prediction file and combine with historical data
     
     Args:
-        prediction_filename: Name of the parquet file in perdictions folder
+        prediction_filename: Name of the parquet file in predictions folder
         
     Returns:
         tuple: (predictions_df, combined_df)
@@ -559,7 +559,7 @@ def get_predictions_and_combined(prediction_filename):
     
     try:
         # Load the prediction file
-        predictions = pd.read_parquet(f'perdictions/{prediction_filename}')
+        predictions = pd.read_parquet(f'./app/predictions/{prediction_filename}')
         
         # Combine with historical data
         combined = pd.concat([HISTORICAL_DATA, predictions], ignore_index=True)
