@@ -165,11 +165,17 @@ h1, h2, h3, h4, h5, h6, .card-title {
     margin-bottom: 0;
 }
 
-/* Specific styling for the Y/Y change */
-.kpi-card-body .kpi-value p {
-    font-size: 1.5rem;
+.kpi-card-body .kpi-value {
+    font-size: 1.75rem;
     font-weight: 700;
+    color: #212529; /* Dark heading text */
+    line-height: 1.2;
     margin-bottom: 0;
+
+    /* --- ADD THESE 3 LINES --- */
+    white-space: nowrap;     /* Prevents text from wrapping */
+    overflow: hidden;        /* Hides anything that goes past the edge */
+    text-overflow: ellipsis; /* Adds the "..." */
 }
 .kpi-card-body .kpi-value .text-muted {
     font-size: 0.9rem;
