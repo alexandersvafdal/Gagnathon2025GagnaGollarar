@@ -1,9 +1,10 @@
 import dash
-from dash import Dash, dcc, html, Input, Output, State, ALL
+from dash import Dash, dcc, html, Input, Output, State, ALL, ClientsideFunction
 import dash_bootstrap_components as dbc
 import plotly.graph_objects as go
 import pandas as pd
 import warnings
+import dash_ag_grid as dag
 
 # Suppress warnings
 warnings.filterwarnings('ignore', category=FutureWarning)
@@ -28,14 +29,19 @@ PLOTLY_TEMPLATE = "plotly_white"
 
 # --- LOAD HISTORICAL DATA AND PREDICTIONS ---
 try:
-    HISTORICAL_DATA = pd.read_parquet('historical_data.parquet')
-    ALL_PREDICTIONS = pd.read_parquet('all_predictions.parquet')
+    HISTORICAL_DATA = pd.read_parquet('../historical_data.parquet')
+    ALL_PREDICTIONS = pd.read_parquet('../all_predictions.parquet')
     
     COMBINED_DATA = pd.concat([HISTORICAL_DATA, ALL_PREDICTIONS], ignore_index=True)
     
     COMBINED_DATA['timestamp'] = pd.to_datetime(COMBINED_DATA['timestamp'])
     COMBINED_DATA['year'] = COMBINED_DATA['timestamp'].dt.year
     COMBINED_DATA['value'] = COMBINED_DATA['y_true'].fillna(COMBINED_DATA['y_pred'])
+
+    # Round values for display
+    COMBINED_DATA['value'] = COMBINED_DATA['value'].round(2)
+    COMBINED_DATA['y_true'] = COMBINED_DATA['y_true'].round(2)
+    COMBINED_DATA['y_pred'] = COMBINED_DATA['y_pred'].round(2)
 
     ALL_COUNTRIES = sorted(COMBINED_DATA['Country'].dropna().unique().tolist())
     ALL_BRANCHES = sorted(COMBINED_DATA['Branches'].dropna().unique().tolist())
@@ -129,38 +135,92 @@ def format_yoy_change(change_pct):
 
 # --- == Tab Layouts == ---
 
-# --- Overview Tab ---
+# --- Overview Tab (MODIFIED) ---
 overview_tab = html.Div([
+    # Top row: Filters
     dbc.Row([
         dbc.Col([
             dbc.Card(
                 dbc.CardBody([
-                    html.Label("Select Year for Overview", className="form-label"),
-                    dcc.Dropdown(
-                        id='overview-year-dropdown',
-                        options=[{'label': str(year), 'value': year} for year in ALL_YEARS],
-                        value=ALL_YEARS[-1] if ALL_YEARS else None,
-                        clearable=False,
-                        className='custom-dropdown'
-                    )
+                    dbc.Row([
+                        dbc.Col([
+                            html.Label("Select Year for Overview", className="form-label"),
+                            dcc.Dropdown(
+                                id='overview-year-dropdown',
+                                options=[{'label': str(year), 'value': year} for year in ALL_YEARS],
+                                value=ALL_YEARS[-1] if ALL_YEARS else None,
+                                clearable=False,
+                                className='custom-dropdown'
+                            )
+                        ], md=6),
+                        dbc.Col([
+                            html.Label("Filter by Sector (Optional)", className="form-label"),
+                            dcc.Dropdown(
+                                id='overview-branch-dropdown',
+                                options=[{'label': branch, 'value': branch} for branch in ALL_BRANCHES],
+                                value=None,
+                                placeholder="All Sectors (Total)",
+                                clearable=True,
+                                className='custom-dropdown'
+                            )
+                        ], md=6)
+                    ])
                 ]),
                 className="graph-card"
             )
         ], md=12)
     ], className="mb-4"),
+    
+    # Second row: KPI Cards (MODIFIED)
     dbc.Row([
+        # Removed align-items-stretch and h-100. Relies on CSS min-height.
         dbc.Col(dbc.Card(dbc.CardBody(id='kpi-total-value', className="kpi-card-body")), md=3),
         dbc.Col(dbc.Card(dbc.CardBody(id='kpi-yoy-change', className="kpi-card-body")), md=3),
         dbc.Col(dbc.Card(dbc.CardBody(id='kpi-top-country', className="kpi-card-body")), md=3),
         dbc.Col(dbc.Card(dbc.CardBody(id='kpi-top-sector', className="kpi-card-body")), md=3),
-    ], className="mb-4"),
+    ], className="mb-4"), 
+    
+    # Third row: Map and Top 5 Charts (MODIFIED)
     dbc.Row([
-        dbc.Col(create_graph_card('overview-map-chart', height='60vh'), md=8),
-        dbc.Col([
-            dbc.Row(dbc.Col(create_graph_card('overview-top-countries-bar', height='30vh'))),
-            dbc.Row(dbc.Col(create_graph_card('overview-top-sectors-bar', height='30vh')), className="mt-2"),
-        ], md=4),
-    ]),
+        # Map Column
+        dbc.Col(
+            dbc.Card(
+                dbc.CardBody(
+                    # Explicit height on the graph
+                    dcc.Graph(id='overview-map-chart', style={'height': '60vh'}) 
+                ),
+                className="graph-card" 
+            ),
+            md=8
+        ),
+        # Bar Charts Column
+        dbc.Col(
+            [
+                dbc.Row(
+                    dbc.Col(
+                        dbc.Card(
+                            dbc.CardBody(
+                                # Explicit, balanced heights on the graphs
+                                dcc.Graph(id='overview-top-countries-bar', style={'height': '28.5vh'}) 
+                            ),
+                            className="graph-card"
+                        )
+                    ), 
+                className="mb-4"), # Use bootstrap margin
+                dbc.Row(
+                    dbc.Col(
+                        dbc.Card(
+                            dbc.CardBody(
+                                dcc.Graph(id='overview-top-sectors-bar', style={'height': '28.5vh'})
+                            ),
+                            className="graph-card"
+                        )
+                    )
+                ),
+            ],
+            md=4
+        ),
+    ], className="mb-4") # Removed fixed height from the Row
 ])
 
 # --- Analysis Dashboard Tab ---
@@ -195,7 +255,6 @@ dashboard_sidebar = dbc.Col(
     id="sidebar"
 )
 
-# --- MODIFIED DASHBOARD CHARTS LAYOUT ---
 dashboard_charts = dbc.Col(
     [
         dbc.Row([
@@ -203,13 +262,12 @@ dashboard_charts = dbc.Col(
         ]),
         dbc.Row([
             dbc.Col(create_graph_card('accuracy-chart', height='45vh'), md=4),
-            dbc.Col(create_graph_card('residuals-hist', height='45vh'), md=4), # <-- NEW CHART
+            dbc.Col(create_graph_card('residuals-hist', height='45vh'), md=4),
             dbc.Col(create_graph_card('residuals-chart', height='45vh'), md=4),
         ], className="mt-4"),
     ],
     md=9
 )
-# --- END MODIFICATION ---
 
 dashboard_tab = html.Div([
     dbc.Row([
@@ -304,6 +362,84 @@ pie_chart_tab = html.Div([
     )
 ])
 
+# --- Data Table Tab ---
+data_table_tab = html.Div([
+    dbc.Card(
+        dbc.CardBody([
+            html.H5("View & Export Data", className="card-title"),
+            html.P("Filter the data and click the export button below.", className="card-text text-muted"),
+            html.Hr(),
+            dbc.Row([
+                dbc.Col([
+                    html.Label("Filter Years", className="form-label"),
+                    dcc.Dropdown(
+                        id='table-year-dropdown',
+                        options=[{'label': str(year), 'value': year} for year in ALL_YEARS],
+                        multi=True,
+                        placeholder="All Years",
+                        className='custom-dropdown'
+                    )
+                ], md=4),
+                dbc.Col([
+                    html.Label("Filter Countries", className="form-label"),
+                    dcc.Dropdown(
+                        id='table-country-dropdown',
+                        options=[{'label': country, 'value': country} for country in ALL_COUNTRIES],
+                        multi=True,
+                        placeholder="All Countries",
+                        className='custom-dropdown'
+                    )
+                ], md=4),
+                dbc.Col([
+                    html.Label("Filter Sectors", className="form-label"),
+                    dcc.Dropdown(
+                        id='table-branch-dropdown',
+                        options=[{'label': branch, 'value': branch} for branch in ALL_BRANCHES],
+                        multi=True,
+                        placeholder="All Sectors",
+                        className='custom-dropdown'
+                    )
+                ], md=4),
+            ], className="mb-3"),
+            
+            dbc.Button(
+                "Export Filtered Data as CSV", 
+                id="export-csv-button", 
+                color="primary", 
+                className="mb-3"
+            ),
+            
+            dag.AgGrid(
+                id='data-export-grid',
+                rowData=[],
+                columnDefs=[
+                    {'field': 'timestamp', 'filter': 'agDateColumnFilter'},
+                    {'field': 'Country', 'filter': True},
+                    {'field': 'Branches', 'filter': True},
+                    {'field': 'value', 'headerName': 'Value'},
+                    {'field': 'prediction_type', 'filter': True},
+                    {'field': 'y_true', 'headerName': 'Actual Value'},
+                    {'field': 'y_pred', 'headerName': 'Predicted Value'},
+                ],
+                defaultColDef={
+                    "sortable": True,
+                    "resizable": True,
+                    "filter": True,
+                    "floatingFilter": True,
+                },
+                columnSize="sizeToFit",
+                className="ag-theme-alpine",
+                style={"height": "60vh"},
+                csvExportParams={
+                    "fileName": "export_data.csv",
+                },
+            )
+        ]),
+        className="graph-card"
+    )
+])
+
+
 # --- == Main Layout == ---
 app.layout = html.Div([
     navbar,
@@ -313,6 +449,7 @@ app.layout = html.Div([
             dbc.Tab(label="📈 Single Series Analysis", tab_id="tab-dashboard", children=[dashboard_tab]),
             dbc.Tab(label="🌍 Country Comparison", tab_id="tab-comparison", children=[comparison_tab]),
             dbc.Tab(label="📊 Composition Chart", tab_id="tab-pie", children=[pie_chart_tab]),
+            dbc.Tab(label="📋 Data Table", tab_id="tab-table", children=[data_table_tab]),
         ], className="main-tabs"),
         fluid=True,
         className="dbc mt-4"
@@ -331,9 +468,10 @@ app.layout = html.Div([
     Output('overview-map-chart', 'figure'),
     Output('overview-top-countries-bar', 'figure'),
     Output('overview-top-sectors-bar', 'figure'),
-    Input('overview-year-dropdown', 'value')
+    Input('overview-year-dropdown', 'value'),
+    Input('overview-branch-dropdown', 'value')
 )
-def update_overview_tab(selected_year):
+def update_overview_tab(selected_year, selected_sector):
     if not selected_year:
         empty_kpi = [html.H5("No Data"), html.H3("-")]
         empty_fig = create_empty_fig("Please select a year")
@@ -342,7 +480,11 @@ def update_overview_tab(selected_year):
     dff_current_year = COMBINED_DATA[COMBINED_DATA['year'] == selected_year]
     dff_prev_year = COMBINED_DATA[COMBINED_DATA['year'] == selected_year - 1]
 
-    # KPIs
+    if selected_sector:
+        dff_current_year = dff_current_year[dff_current_year['Branches'] == selected_sector]
+        dff_prev_year = dff_prev_year[dff_prev_year['Branches'] == selected_sector]
+        
+    # --- KPIs ---
     total_value = dff_current_year['value'].sum()
     kpi_total_val_children = [
         html.H5("Total Export Value", className="kpi-title"),
@@ -359,8 +501,9 @@ def update_overview_tab(selected_year):
     country_sum = dff_current_year.groupby('Country')['value'].sum()
     sector_sum = dff_current_year.groupby('Branches')['value'].sum()
 
+    # Robust KPI logic
     kpi_top_country_children = [html.H5("Top Country", className="kpi-title"), html.H3("-", className="kpi-value")]
-    if not country_sum.empty:
+    if not country_sum.empty and country_sum.max() > 0:
         top_country_name = country_sum.idxmax()
         top_country_value = country_sum.max()
         kpi_top_country_children = [
@@ -370,7 +513,7 @@ def update_overview_tab(selected_year):
         ]
 
     kpi_top_sector_children = [html.H5("Top Sector", className="kpi-title"), html.H3("-", className="kpi-value")]
-    if not sector_sum.empty:
+    if not sector_sum.empty and sector_sum.max() > 0:
         top_sector_name = sector_sum.idxmax()
         top_sector_value = sector_sum.max()
         kpi_top_sector_children = [
@@ -379,21 +522,25 @@ def update_overview_tab(selected_year):
             html.P(f"${top_sector_value:,.0f}", className="text-muted mb-0")
         ]
 
-    # Map Figure
+    # --- Map Figure ---
     map_data = dff_current_year.groupby('Country')['value'].sum().reset_index()
     map_fig = go.Figure(go.Choropleth(
         locations=map_data['Country'], locationmode='country names', z=map_data['value'],
         colorscale='Blues', colorbar_title="Export Value",
         marker_line_color='darkgray', marker_line_width=0.5
     ))
+    map_title = f'Global Export Distribution {selected_year}'
+    if selected_sector:
+        map_title += f' | Sector: {selected_sector}'
     map_fig.update_layout(
-        title_text=f'Global Export Distribution {selected_year}',
+        title_text=map_title,
         template=PLOTLY_TEMPLATE,
         geo=dict(showframe=False, showcoastlines=False, projection_type='mercator'),
-        margin=dict(l=0, r=0, t=40, b=0)
+        margin=dict(l=0, r=0, t=40, b=0),
+        transition_duration=500
     )
     
-    # Bar Charts
+    # --- Bar Charts ---
     top_5_countries = country_sum.nlargest(5).sort_values(ascending=True)
     top_5_sectors = sector_sum.nlargest(5).sort_values(ascending=True)
 
@@ -405,7 +552,8 @@ def update_overview_tab(selected_year):
     country_bar_fig.update_layout(
         title='Top 5 Countries', template=PLOTLY_TEMPLATE,
         xaxis=dict(visible=False), yaxis=dict(title=''),
-        margin=dict(l=10, r=10, t=30, b=10)
+        margin=dict(l=10, r=10, t=30, b=10),
+        transition_duration=500
     )
     
     sector_bar_fig = go.Figure(go.Bar(
@@ -416,13 +564,22 @@ def update_overview_tab(selected_year):
     sector_bar_fig.update_layout(
         title='Top 5 Sectors', template=PLOTLY_TEMPLATE,
         xaxis=dict(visible=False), yaxis=dict(title=''),
-        margin=dict(l=10, r=10, t=30, b=10)
+        margin=dict(l=10, r=10, t=30, b=10),
+        transition_duration=500
     )
+    
+    if selected_sector:
+        sector_bar_fig = create_empty_fig("Sector already selected")
+    elif top_5_sectors.empty:
+        country_bar_fig = create_empty_fig("No Country data")
+        sector_bar_fig = create_empty_fig("No Sector data")
+
 
     return (
         kpi_total_val_children, kpi_yoy_children, kpi_top_country_children, kpi_top_sector_children,
         map_fig, country_bar_fig, sector_bar_fig
     )
+
 
 # --- Callbacks for "Single Series Analysis" Tab ---
 @app.callback(
@@ -583,7 +740,6 @@ def update_residuals_chart(selected_country, selected_branch):
     )
     return fig
 
-# --- NEW CALLBACK FOR RESIDUALS HISTOGRAM ---
 @app.callback(
     Output('residuals-hist', 'figure'),
     Input('country-dropdown', 'value'),
@@ -606,7 +762,6 @@ def update_residuals_hist(selected_country, selected_branch):
     
     fig = go.Figure()
     
-    # Add histogram trace
     fig.add_trace(go.Histogram(
         x=predictions_filtered['residual'],
         name='Residuals',
@@ -614,7 +769,6 @@ def update_residuals_hist(selected_country, selected_branch):
         opacity=0.7
     ))
     
-    # Add a vertical line at 0
     fig.add_vline(
         x=0, 
         line_dash="dash", 
@@ -630,7 +784,7 @@ def update_residuals_hist(selected_country, selected_branch):
         showlegend=False,
         margin=dict(t=50, b=40),
         transition_duration=500,
-        barmode='overlay' # Overlay histograms if we ever add more
+        barmode='overlay'
     )
     return fig
 
@@ -734,6 +888,42 @@ def update_pie_chart(selected_year, selected_countries, selected_branches):
     )
     
     return fig
+
+# --- Data Table Tab Callbacks ---
+@app.callback(
+    Output('data-export-grid', 'rowData'),
+    Input('table-year-dropdown', 'value'),
+    Input('table-country-dropdown', 'value'),
+    Input('table-branch-dropdown', 'value')
+)
+def update_data_table(selected_years, selected_countries, selected_branches):
+    dff = COMBINED_DATA.copy()
+    
+    if selected_years:
+        dff = dff[dff['year'].isin(selected_years)]
+    if selected_countries:
+        dff = dff[dff['Country'].isin(selected_countries)]
+    if selected_branches:
+        dff = dff[dff['Branches'].isin(selected_branches)]
+        
+    dff['timestamp'] = dff['timestamp'].dt.strftime('%Y-%m-%d')
+    
+    dff_final = dff[[
+        'timestamp', 'Country', 'Branches', 'value', 
+        'prediction_type', 'y_true', 'y_pred'
+    ]]
+    
+    return dff_final.to_dict('records')
+
+app.clientside_callback(
+    ClientsideFunction(
+        namespace='dash_ag_grid',
+        function_name='exportDataAsCsv'
+    ),
+    Output('data-export-grid', 'exportDataAsCsv'),
+    Input('export-csv-button', 'n_clicks'),
+    prevent_initial_call=True
+)
 
 
 if __name__ == "__main__":
