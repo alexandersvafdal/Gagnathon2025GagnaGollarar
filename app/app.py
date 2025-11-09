@@ -53,6 +53,16 @@ navbar = dbc.Navbar(
                 href="#",
                 style={"textDecoration": "none"},
             ),
+            # Theme switch on the right
+            html.Div(
+                dbc.Row(
+                    [
+                        dbc.Col(dbc.Switch(id='theme-switch', label='Dark mode', value=False, className='me-2')),
+                    ],
+                    className='g-0 align-items-center'
+                ),
+                className='ms-auto d-flex align-items-center'
+            ),
         ]
     ),
     #color="dark",
@@ -155,13 +165,26 @@ main_content = dbc.Col(
 )
 
 app.layout = html.Div([
+    dcc.Store(id='theme-store', data={'theme': 'light'}),
     navbar,
     dbc.Container(
         dbc.Row([sidebar, main_content]),
         fluid=True,
         className="dbc"
     ),
-])
+], id='page-container', className='theme-light')
+
+# Theme toggle callback: update store and page container class
+@app.callback(
+    Output('theme-store', 'data'),
+    Output('page-container', 'className'),
+    Input('theme-switch', 'value')
+)
+def toggle_theme(is_dark):
+    theme = 'dark' if is_dark else 'light'
+    cls = 'theme-dark' if is_dark else 'theme-light'
+    return {'theme': theme}, cls
+
 
 # --- == Callbacks == ---
 
@@ -188,18 +211,23 @@ def update_branch_dropdown(selected_country):
 @app.callback(
     Output('main-forecast-chart', 'figure'),
     Input('country-dropdown', 'value'),
-    Input('branch-dropdown', 'value')
+    Input('branch-dropdown', 'value'),
+    Input('theme-store', 'data')
 )
-def update_chart_from_scenarios(selected_country, selected_branch):
-    
+def update_chart_from_scenarios(selected_country, selected_branch, theme_data):
+    theme = theme_data.get('theme') if theme_data else 'light'
+    template = 'plotly_dark' if theme == 'dark' else 'plotly_white'
+    paper_bg = '#0F2537' if theme == 'dark' else 'white'
+    plot_bg = '#0F2537' if theme == 'dark' else 'white'
+
     fig = go.Figure()
     
     if not selected_country or not selected_branch:
         fig.update_layout(
             title="Please select a Country and Branch",
-            template="plotly_white",
-            paper_bgcolor='white',
-            plot_bgcolor='white'
+            template=template,
+            paper_bgcolor=paper_bg,
+            plot_bgcolor=plot_bg
         )
         return fig
     
@@ -273,10 +301,10 @@ def update_chart_from_scenarios(selected_country, selected_branch):
         title=title_text,
         xaxis_title="Date",
         yaxis_title="Value",
-        template="plotly_white",
+        template=template,
         legend_title="Series",
-        paper_bgcolor='white',
-        plot_bgcolor='white'
+        paper_bgcolor=paper_bg,
+        plot_bgcolor=plot_bg
     )
     
     return fig
@@ -285,11 +313,17 @@ def update_chart_from_scenarios(selected_country, selected_branch):
 @app.callback(
     Output('export-chart', 'figure'),
     Input('country-dropdown', 'value'),
-    Input('branch-dropdown', 'value')
+    Input('branch-dropdown', 'value'),
+    Input('theme-store', 'data')
 )
-def update_export_chart(selected_country, selected_branch):
+def update_export_chart(selected_country, selected_branch, theme_data):
+    theme = theme_data.get('theme') if theme_data else 'light'
+    template = 'plotly_dark' if theme == 'dark' else 'plotly_white'
+    paper_bg = '#0F2537' if theme == 'dark' else 'white'
+    plot_bg = '#0F2537' if theme == 'dark' else 'white'
+
     if not selected_country or not selected_branch:
-        return go.Figure(layout={'template': 'plotly_white', 'title': 'No data available'})
+        return go.Figure(layout={'template': template, 'title': 'No data available'})
 
     # Get historical data
     historical_filtered = HISTORICAL_DATA[
@@ -304,7 +338,7 @@ def update_export_chart(selected_country, selected_branch):
     ].copy()
     
     if historical_filtered.empty and predictions_filtered.empty:
-        return go.Figure(layout={'template': 'plotly_white', 'title': 'No data for selected filters'})
+        return go.Figure(layout={'template': template, 'title': 'No data for selected filters'})
 
     # Create figure
     fig = go.Figure()
@@ -366,11 +400,11 @@ def update_export_chart(selected_country, selected_branch):
         title=f"Export Data & Predictions: {selected_country} - {selected_branch}",
         xaxis=dict(title="Date"),
         yaxis=dict(title="Value"),
-        template="plotly_white",
+        template=template,
         legend=dict(x=0.01, y=0.99),
         hovermode='x unified',
-        paper_bgcolor='white',
-        plot_bgcolor='white'
+        paper_bgcolor=paper_bg,
+        plot_bgcolor=plot_bg
     )
     
     return fig
@@ -379,11 +413,17 @@ def update_export_chart(selected_country, selected_branch):
 @app.callback(
     Output('accuracy-chart', 'figure'),
     Input('country-dropdown', 'value'),
-    Input('branch-dropdown', 'value')
+    Input('branch-dropdown', 'value'),
+    Input('theme-store', 'data')
 )
-def update_accuracy_chart(selected_country, selected_branch):
+def update_accuracy_chart(selected_country, selected_branch, theme_data):
+    theme = theme_data.get('theme') if theme_data else 'light'
+    template = 'plotly_dark' if theme == 'dark' else 'plotly_white'
+    paper_bg = '#0F2537' if theme == 'dark' else 'white'
+    plot_bg = '#0F2537' if theme == 'dark' else 'white'
+
     if not selected_country or not selected_branch:
-        return go.Figure(layout={'template': 'plotly_white', 'title': 'Please select a Country and Branch'})
+        return go.Figure(layout={'template': template, 'title': 'Please select a Country and Branch'})
 
     # Get predictions with actual values for comparison
     predictions_filtered = ALL_PREDICTIONS[
@@ -393,7 +433,7 @@ def update_accuracy_chart(selected_country, selected_branch):
     ].copy()
     
     if predictions_filtered.empty:
-        return go.Figure(layout={'template': 'plotly_white', 'title': 'No validation/test data available'})
+        return go.Figure(layout={'template': template, 'title': 'No validation/test data available'})
 
     predictions_filtered['timestamp'] = pd.to_datetime(predictions_filtered['timestamp'])
     predictions_filtered = predictions_filtered.sort_values(by='timestamp')
@@ -432,9 +472,9 @@ def update_accuracy_chart(selected_country, selected_branch):
         title=f"Model Accuracy: {selected_country} - {selected_branch}",
         xaxis=dict(title="Actual Value"),
         yaxis=dict(title="Predicted Value"),
-        template="plotly_white",
-        paper_bgcolor='white',
-        plot_bgcolor='white',
+        template=template,
+        paper_bgcolor=paper_bg,
+        plot_bgcolor=plot_bg,
         hovermode='closest'
     )
     
@@ -444,11 +484,17 @@ def update_accuracy_chart(selected_country, selected_branch):
 @app.callback(
     Output('residuals-chart', 'figure'),
     Input('country-dropdown', 'value'),
-    Input('branch-dropdown', 'value')
+    Input('branch-dropdown', 'value'),
+    Input('theme-store', 'data')
 )
-def update_residuals_chart(selected_country, selected_branch):
+def update_residuals_chart(selected_country, selected_branch, theme_data):
+    theme = theme_data.get('theme') if theme_data else 'light'
+    template = 'plotly_dark' if theme == 'dark' else 'plotly_white'
+    paper_bg = '#0F2537' if theme == 'dark' else 'white'
+    plot_bg = '#0F2537' if theme == 'dark' else 'white'
+
     if not selected_country or not selected_branch:
-        return go.Figure(layout={'template': 'plotly_white', 'title': 'Please select a Country and Branch'})
+        return go.Figure(layout={'template': template, 'title': 'Please select a Country and Branch'})
 
     # Get predictions with actual values
     predictions_filtered = ALL_PREDICTIONS[
@@ -458,7 +504,7 @@ def update_residuals_chart(selected_country, selected_branch):
     ].copy()
     
     if predictions_filtered.empty:
-        return go.Figure(layout={'template': 'plotly_white', 'title': 'No validation/test data available'})
+        return go.Figure(layout={'template': template, 'title': 'No validation/test data available'})
 
     predictions_filtered['timestamp'] = pd.to_datetime(predictions_filtered['timestamp'])
     predictions_filtered = predictions_filtered.sort_values(by='timestamp')
@@ -486,9 +532,9 @@ def update_residuals_chart(selected_country, selected_branch):
         title=f"Prediction Residuals: {selected_country} - {selected_branch}",
         xaxis=dict(title="Date"),
         yaxis=dict(title="Residual (Actual - Predicted)"),
-        template="plotly_white",
-        paper_bgcolor='white',
-        plot_bgcolor='white',
+        template=template,
+        paper_bgcolor=paper_bg,
+        plot_bgcolor=plot_bg,
         hovermode='x unified'
     )
     
@@ -498,11 +544,17 @@ def update_residuals_chart(selected_country, selected_branch):
 @app.callback(
     Output('comparison-chart', 'figure'),
     Input('comparison-countries', 'value'),
-    Input('branch-dropdown', 'value')
+    Input('branch-dropdown', 'value'),
+    Input('theme-store', 'data')
 )
-def update_comparison_chart(selected_countries, selected_branch):
+def update_comparison_chart(selected_countries, selected_branch, theme_data):
+    theme = theme_data.get('theme') if theme_data else 'light'
+    template = 'plotly_dark' if theme == 'dark' else 'plotly_white'
+    paper_bg = '#0F2537' if theme == 'dark' else 'white'
+    plot_bg = '#0F2537' if theme == 'dark' else 'white'
+
     if not selected_countries or not selected_branch:
-        return go.Figure(layout={'template': 'plotly_white', 'title': 'Please select countries and a branch'})
+        return go.Figure(layout={'template': template, 'title': 'Please select countries and a branch'})
 
     # Limit to 5 countries
     if len(selected_countries) > 5:
@@ -557,9 +609,9 @@ def update_comparison_chart(selected_countries, selected_branch):
         title=f"Country Comparison: {selected_branch}",
         xaxis=dict(title="Date"),
         yaxis=dict(title="Value"),
-        template="plotly_white",
-        paper_bgcolor='white',
-        plot_bgcolor='white',
+        template=template,
+        paper_bgcolor=paper_bg,
+        plot_bgcolor=plot_bg,
         hovermode='x unified',
         legend=dict(x=0.01, y=0.99)
     )

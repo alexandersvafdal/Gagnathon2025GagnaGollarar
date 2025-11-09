@@ -104,3 +104,98 @@ body, html {
 
 /* Make sure form labels stand out on white */
 .form-label { color: #495057; }
+
+/* --- Dark theme overrides (applied when root has class .theme-dark) --- */
+.theme-dark, .theme-dark body, .theme-dark html {
+    background-color: #0F2537 !important; /* page background */
+    color: #E9ECEF;
+}
+
+.theme-dark .navbar {
+    background-color: #0F2537 !important;
+    border-bottom: 1px solid #213746;
+}
+.theme-dark .navbar-brand {
+    color: #E9ECEF !important;
+}
+
+.theme-dark .sidebar-card {
+    background-color: #1A3A52;
+    border: none;
+    border-radius: 8px;
+    box-shadow: 0 6px 18px rgba(0,0,0,0.6);
+    color: #E9ECEF;
+}
+.theme-dark .sidebar-card .form-label {
+    color: #E9ECEF;
+}
+
+/* Dark dropdown styles (scoped to .theme-dark + .light-dropdown) */
+.theme-dark .light-dropdown .Select-control,
+.theme-dark .light-dropdown .select__control,
+.theme-dark .light-dropdown .css-1hwfws3 {
+    background-color: #2B3E50 !important;
+    border: 1px solid #4E5D6C !important;
+    color: #E9ECEF !important;
+}
+.theme-dark .light-dropdown .Select-value-label,
+.theme-dark .light-dropdown .Select-placeholder,
+.theme-dark .light-dropdown .css-1uccc91-singleValue {
+    color: #E9ECEF !important;
+}
+.theme-dark .light-dropdown .Select-arrow,
+.theme-dark .light-dropdown .css-1yk1gt9-indicatorContainer {
+    color: #E9ECEF !important;
+}
+.theme-dark .light-dropdown .Select-menu-outer,
+.theme-dark .light-dropdown .select__menu,
+.theme-dark .light-dropdown .css-26l3qy-menu {
+    background-color: #1A3A52 !important;
+    border: 1px solid #4E5D6C !important;
+    box-shadow: 0 6px 18px rgba(0,0,0,0.6);
+}
+.theme-dark .light-dropdown .Select-option,
+.theme-dark .light-dropdown .select__option,
+.theme-dark .light-dropdown .css-yt9ioa-option {
+    background-color: #1A3A52;
+    color: #E9ECEF;
+}
+.theme-dark .light-dropdown .Select-option.is-focused,
+.theme-dark .light-dropdown .select__option--is-focused,
+.theme-dark .light-dropdown .css-yt9ioa-option--is-focused {
+    background-color: #4E5D6C !important;
+    color: #FFFFFF !important;
+}
+
+/* Tabs/content in dark */
+.theme-dark .nav-tabs { border-bottom: 1px solid #4E5D6C; }
+.theme-dark .nav-tabs .nav-link { color: #ADB5BD; }
+.theme-dark .nav-tabs .nav-link.active {
+    color: #FFFFFF;
+    background-color: #1A3A52;
+    border-color: #4E5D6C;
+    border-bottom-color: #1A3A52;
+}
+.theme-dark .tab-content {
+    background-color: #1A3A52;
+    border: 1px solid #4E5D6C;
+    border-top: none;
+    border-radius: 0 0 8px 8px;
+    padding: 18px;
+    box-shadow: 0 6px 18px rgba(0,0,0,0.6);
+    color: #E9ECEF;
+}
+
+/* Plot containers in dark theme */
+.theme-dark #shap-global-plot, .theme-dark #shap-local-plot, .theme-dark .js-plotly-plot {
+    background-color: #0F2537;
+    border-radius: 6px;
+}
+
+/* In theme-dark, make form labels light */
+.theme-dark .form-label { color: #E9ECEF; }
+
+/* Accent for switch alignment tweaks */
+.theme-dark .navbar .form-check-label { color: #E9ECEF; }
+
+/* End dark-theme overrides */
