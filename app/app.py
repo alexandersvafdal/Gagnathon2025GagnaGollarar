@@ -29,8 +29,8 @@ PLOTLY_TEMPLATE = "plotly_white"
 
 # --- LOAD HISTORICAL DATA AND PREDICTIONS ---
 try:
-    HISTORICAL_DATA = pd.read_parquet('historical_data.parquet')
-    ALL_PREDICTIONS = pd.read_parquet('all_predictions.parquet')
+    HISTORICAL_DATA = pd.read_parquet('app/historical_data.parquet')
+    ALL_PREDICTIONS = pd.read_parquet('app/all_predictions.parquet')
     
     COMBINED_DATA = pd.concat([HISTORICAL_DATA, ALL_PREDICTIONS], ignore_index=True)
     
