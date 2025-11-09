@@ -3,10 +3,12 @@ from dash import Dash, dcc, html, Input, Output, State, ALL, ClientsideFunction
 import dash_bootstrap_components as dbc
 import plotly.graph_objects as go
 import pandas as pd
+import numpy as np
 import warnings
 import dash_ag_grid as dag
 import os
 from pathlib import Path
+from sklearn.metrics import r2_score, mean_squared_error
 
 # Suppress warnings
 warnings.filterwarnings('ignore', category=FutureWarning)
@@ -274,8 +276,8 @@ dashboard_sidebar = dbc.Col(
                 html.Label("Branch / Product Category", className="form-label"),
                 dcc.Dropdown(
                     id='branch-dropdown',
-                    options=[{'label': branch, 'value': branch} for branch in ALL_BRANCHES],
-                    value=ALL_BRANCHES[0] if ALL_BRANCHES else None,
+                    options=[{'label': 'All Branches', 'value': 'ALL'}] + [{'label': branch, 'value': branch} for branch in ALL_BRANCHES],
+                    value='ALL',
                     clearable=False,
                     className='custom-dropdown'
                 ),
@@ -357,6 +359,30 @@ dashboard_sidebar = dbc.Col(
 
 dashboard_charts = dbc.Col(
     [
+        dbc.Row([
+            dbc.Col([
+                dbc.Card([
+                    dbc.CardBody([
+                        html.Div([
+                            html.H6("R² Score", className="text-muted mb-2"),
+                            html.H3(id='r2-score-value', children="-", className="mb-0"),
+                            html.Small(id='r2-score-description', className="text-muted")
+                        ], className="text-center")
+                    ])
+                ], className="h-100 d-flex flex-column")
+            ], md=6),
+            dbc.Col([
+                dbc.Card([
+                    dbc.CardBody([
+                        html.Div([
+                            html.H6("RMSE", className="text-muted mb-2"),
+                            html.H3(id='rmse-value', children="-", className="mb-0"),
+                            html.Small(id='rmse-description', className="text-muted")
+                        ], className="text-center")
+                    ])
+                ], className="h-100 d-flex flex-column")
+            ], md=6),
+        ], className="mb-3"),
         dbc.Row([
             dbc.Col(create_graph_card('main-forecast-chart', height='50vh'), md=12),
         ]),
@@ -770,7 +796,7 @@ def load_prediction_file(selected_file):
     Input('selected-prediction-file', 'data')
 )
 def update_country_dropdown(selected_branch, prediction_filename):
-    if not selected_branch:
+    if not selected_branch or selected_branch == 'ALL':
         return [{'label': 'All Countries', 'value': 'ALL'}], 'ALL'
     
     _, combined_df = get_predictions_and_combined(prediction_filename)
@@ -790,6 +816,108 @@ def update_country_dropdown(selected_branch, prediction_filename):
 )
 def reset_sliders(n_clicks):
     return 0, 0, 0, 0
+
+@app.callback(
+    Output('r2-score-value', 'children'),
+    Output('r2-score-description', 'children'),
+    Output('rmse-value', 'children'),
+    Output('rmse-description', 'children'),
+    Input('country-dropdown', 'value'),
+    Input('branch-dropdown', 'value'),
+    Input('selected-prediction-file', 'data')
+)
+def update_metrics(selected_country, selected_branch, prediction_filename):
+    if not selected_branch:
+        return "-", "Select a branch", "-", "Select a branch"
+    
+    predictions_df, _ = get_predictions_and_combined(prediction_filename)
+    
+    if predictions_df.empty:
+        return "-", "No prediction data", "-", "No prediction data"
+    
+    # Debug: Check what's in predictions_df
+    print(f"\n=== Prediction File Debug ===")
+    print(f"Prediction file being used: {prediction_filename}")
+    print(f"Total predictions loaded: {len(predictions_df)}")
+    print(f"Unique prediction_types: {predictions_df['prediction_type'].unique() if 'prediction_type' in predictions_df.columns else 'NO prediction_type column!'}")
+    print(f"Unique branches: {predictions_df['Branches'].unique()[:5] if 'Branches' in predictions_df.columns else 'NO Branches column!'}")
+    print(f"Columns: {predictions_df.columns.tolist()}")
+    
+    # Filter predictions by branch and country where BOTH y_true and y_pred exist
+    # (This is the data we can calculate accuracy on)
+    if selected_branch == 'ALL':
+        validation_data = predictions_df[
+            (predictions_df['y_true'].notna()) & 
+            (predictions_df['y_pred'].notna())
+        ].copy()
+    else:
+        validation_data = predictions_df[
+            (predictions_df['Branches'] == selected_branch) &
+            (predictions_df['y_true'].notna()) & 
+            (predictions_df['y_pred'].notna())
+        ].copy()
+    
+    # Apply country filter
+    if selected_country and selected_country != 'ALL':
+        validation_data = validation_data[validation_data['Country'] == selected_country]
+    
+    if validation_data.empty:
+        print(f"WARNING: No validation data with both y_true and y_pred for branch '{selected_branch}', country '{selected_country}'")
+        print(f"Total predictions in file: {len(predictions_df)}")
+        print(f"Predictions with y_true: {predictions_df['y_true'].notna().sum()}")
+        print(f"Predictions with y_pred: {predictions_df['y_pred'].notna().sum()}")
+        return "-", "No validation data", "-", "No validation data"
+    
+    # If ALL branches or ALL countries, aggregate by timestamp
+    if selected_branch == 'ALL' or selected_country == 'ALL' or not selected_country:
+        validation_data = validation_data.groupby('timestamp').agg({
+            'y_true': 'sum',
+            'y_pred': 'sum'
+        }).reset_index()
+    
+    if len(validation_data) < 2:
+        print(f"WARNING: Insufficient data after aggregation. Records: {len(validation_data)}")
+        return "-", "Insufficient data", "-", "Insufficient data"
+    
+    # Calculate metrics using the validation data from prediction file
+    y_true = validation_data['y_true'].values
+    y_pred = validation_data['y_pred'].values
+    
+    # Debug logging
+    print(f"\n=== R² Calculation Debug ===")
+    print(f"Branch: {selected_branch}, Country: {selected_country}")
+    print(f"Validation data points: {len(validation_data)}")
+    if 'timestamp' in validation_data.columns:
+        validation_data['timestamp'] = pd.to_datetime(validation_data['timestamp'])
+        print(f"Date range: {validation_data['timestamp'].min()} to {validation_data['timestamp'].max()}")
+    print(f"y_true stats - Min: {y_true.min():.2f}, Max: {y_true.max():.2f}, Mean: {y_true.mean():.2f}")
+    print(f"y_pred stats - Min: {y_pred.min():.2f}, Max: {y_pred.max():.2f}, Mean: {y_pred.mean():.2f}")
+    print(f"Sample of validation data:\n{validation_data.head(10)}")
+    
+    r2 = r2_score(y_true, y_pred)
+    rmse = np.sqrt(mean_squared_error(y_true, y_pred))
+    
+    print(f"R² Score: {r2:.4f}")
+    print(f"RMSE: {rmse:.2f}")
+    print(f"=========================\n")
+    
+    # Format outputs
+    r2_formatted = f"{r2:.4f}"
+    rmse_formatted = f"{rmse:,.0f} M ISK"
+    
+    # Descriptions based on R² value
+    if r2 >= 0.9:
+        r2_desc = "Excellent fit"
+    elif r2 >= 0.7:
+        r2_desc = "Good fit"
+    elif r2 >= 0.5:
+        r2_desc = "Moderate fit"
+    else:
+        r2_desc = "Poor fit"
+    
+    rmse_desc = f"Validation period: {len(validation_data)} months"
+    
+    return r2_formatted, r2_desc, rmse_formatted, rmse_desc
 
 @app.callback(
     Output('main-forecast-chart', 'figure'),
@@ -813,8 +941,24 @@ def update_main_forecast_chart(selected_country, selected_branch, exchange_rate,
     
     fig = go.Figure()
     
-    # Filter by branch, optionally by country
-    if selected_country and selected_country != 'ALL':
+    # Filter by branch and country
+    if selected_branch == 'ALL':
+        # All branches
+        if selected_country and selected_country != 'ALL':
+            dff_hist = HISTORICAL_DATA[HISTORICAL_DATA['Country'] == selected_country].copy()
+            dff_preds = predictions_df[predictions_df['Country'] == selected_country].copy()
+        else:
+            dff_hist = HISTORICAL_DATA.copy()
+            dff_preds = predictions_df.copy()
+        
+        # Group by timestamp to aggregate values
+        if not dff_hist.empty:
+            dff_hist = dff_hist.groupby('timestamp').agg({'y_true': 'sum'}).reset_index()
+        if not dff_preds.empty:
+            dff_preds = dff_preds.groupby(['timestamp', 'prediction_type']).agg({'y_true': 'sum', 'y_pred': 'sum'}).reset_index()
+    
+    elif selected_country and selected_country != 'ALL':
+        # Specific branch and specific country
         dff_hist = HISTORICAL_DATA[
             (HISTORICAL_DATA['Country'] == selected_country) & (HISTORICAL_DATA['Branches'] == selected_branch)
         ].copy()
@@ -822,7 +966,7 @@ def update_main_forecast_chart(selected_country, selected_branch, exchange_rate,
             (predictions_df['Country'] == selected_country) & (predictions_df['Branches'] == selected_branch)
         ].copy()
     else:
-        # Aggregate all countries for this branch
+        # Specific branch, all countries
         dff_hist = HISTORICAL_DATA[HISTORICAL_DATA['Branches'] == selected_branch].copy()
         dff_preds = predictions_df[predictions_df['Branches'] == selected_branch].copy()
         
@@ -894,11 +1038,10 @@ def update_main_forecast_chart(selected_country, selected_branch, exchange_rate,
                     line=dict(color=COLOR_ACCENT_PURPLE, width=3)
                 ))
     
-    # Simple title: Branch * Country
-    if selected_country and selected_country != 'ALL':
-        title_text = f"Branch vs. Country"
-    else:
-        title_text = f"Branch vs. Country"
+    # Build title based on selections
+    branch_text = "All Branches" if selected_branch == 'ALL' else selected_branch
+    country_text = "All Countries" if (not selected_country or selected_country == 'ALL') else selected_country
+    title_text = f"{branch_text} × {country_text}"
     
     fig.update_layout(
         title=title_text, 
