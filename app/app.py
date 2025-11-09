@@ -1,17 +1,8 @@
 import dash
-from dash import Dash,dcc, html, Input, Output, State, ALL
+from dash import dcc, html, Input, Output
 import dash_bootstrap_components as dbc
 import plotly.graph_objects as go
-import numpy as np
 import pandas as pd
-import json
-# Note: We no longer need shap or sklearn in the dashboard itself
-import matplotlib
-matplotlib.use('Agg')
-import matplotlib.pyplot as plt
-import io
-import base64
-import os
 debug = True
 
 
@@ -40,7 +31,7 @@ except FileNotFoundError as e:
 # REMOVED the first, incorrect app = Dash(__name__)
 app = dash.Dash(
     __name__, 
-    external_stylesheets=[dbc.themes.SUPERHERO, dbc.icons.FONT_AWESOME]
+    external_stylesheets=[dbc.themes.FLATLY, dbc.icons.FONT_AWESOME]
 )
 
 # Ensure the `server` attribute is exposed for Gunicorn
@@ -81,7 +72,7 @@ sidebar = dbc.Col(
                     options=[{'label': country, 'value': country} for country in ALL_COUNTRIES],
                     value=ALL_COUNTRIES[0] if ALL_COUNTRIES else None,
                     clearable=False,
-                    className='dark-dropdown'
+                    className='light-dropdown'
                 ),
                 
                 html.Label("Branch / Product Category", className="form-label mt-3"),
@@ -90,7 +81,7 @@ sidebar = dbc.Col(
                     options=[],  # Will be populated dynamically
                     value=None,
                     clearable=False,
-                    className='dark-dropdown'
+                    className='light-dropdown'
                 ),
             ]),
             className="sidebar-card",
@@ -106,7 +97,7 @@ main_content = dbc.Col(
             label="📈 Time Series",
             tab_id="tab-forecast",
             children=[
-                dcc.Graph(id='main-forecast-chart', figure={'layout': {'template': 'plotly_dark'}}, style={'height': '70vh'})
+                dcc.Graph(id='main-forecast-chart', figure={'layout': {'template': 'plotly_white'}}, style={'height': '70vh'})
             ]
         ),
         
@@ -115,7 +106,7 @@ main_content = dbc.Col(
             tab_id="tab-export",
             children=[
                 html.Div(className='mt-3', children=[
-                    dcc.Graph(id='export-chart', figure={'layout': {'template': 'plotly_dark'}}, style={'height': '70vh'})
+                    dcc.Graph(id='export-chart', figure={'layout': {'template': 'plotly_white'}}, style={'height': '70vh'})
                 ])
             ]
         ),
@@ -125,7 +116,9 @@ main_content = dbc.Col(
             tab_id="tab-accuracy",
             children=[
                 html.Div(className='mt-3', children=[
-                    dcc.Graph(id='accuracy-chart', figure={'layout': {'template': 'plotly_dark'}}, style={'height': '70vh'})
+                    html.Div(className='mt-3', children=[
+                        dcc.Graph(id='accuracy-chart', figure={'layout': {'template': 'plotly_white'}}, style={'height': '70vh'})
+                    ])
                 ])
             ]
         ),
@@ -135,7 +128,7 @@ main_content = dbc.Col(
             tab_id="tab-residuals",
             children=[
                 html.Div(className='mt-3', children=[
-                    dcc.Graph(id='residuals-chart', figure={'layout': {'template': 'plotly_dark'}}, style={'height': '70vh'})
+                    dcc.Graph(id='residuals-chart', figure={'layout': {'template': 'plotly_white'}}, style={'height': '70vh'})
                 ])
             ]
         ),
@@ -151,9 +144,9 @@ main_content = dbc.Col(
                         options=[{'label': country, 'value': country} for country in ALL_COUNTRIES],
                         value=[ALL_COUNTRIES[0]] if ALL_COUNTRIES else [],
                         multi=True,
-                        className='dark-dropdown mb-3'
+                        className='light-dropdown mb-3'
                     ),
-                    dcc.Graph(id='comparison-chart', figure={'layout': {'template': 'plotly_dark'}}, style={'height': '60vh'})
+                    dcc.Graph(id='comparison-chart', figure={'layout': {'template': 'plotly_white'}}, style={'height': '60vh'})
                 ])
             ]
         ),
@@ -204,9 +197,9 @@ def update_chart_from_scenarios(selected_country, selected_branch):
     if not selected_country or not selected_branch:
         fig.update_layout(
             title="Please select a Country and Branch",
-            template="plotly_dark",
-            paper_bgcolor='rgba(0,0,0,0)',
-            plot_bgcolor='rgba(0,0,0,0)'
+            template="plotly_white",
+            paper_bgcolor='white',
+            plot_bgcolor='white'
         )
         return fig
     
@@ -224,8 +217,8 @@ def update_chart_from_scenarios(selected_country, selected_branch):
     
     if not predictions_filtered.empty:
         predictions_filtered['timestamp'] = pd.to_datetime(predictions_filtered['timestamp'])
-        predictions_filtered = predictions_filtered.sort_values('timestamp')
-        
+        predictions_filtered = predictions_filtered.sort_values(by='timestamp')
+
         # Separate by prediction type
         validation = predictions_filtered[predictions_filtered['prediction_type'] == 'Validation']
         future = predictions_filtered[predictions_filtered['prediction_type'] == 'Future']
@@ -242,8 +235,8 @@ def update_chart_from_scenarios(selected_country, selected_branch):
         
         if actual_data:
             combined_actual = pd.concat(actual_data, ignore_index=True)
-            combined_actual = combined_actual.sort_values('timestamp')
-            
+            combined_actual = combined_actual.sort_values(by='timestamp')
+
             fig.add_trace(go.Scatter(
                 x=combined_actual['timestamp'], 
                 y=combined_actual['y_true'], 
@@ -280,10 +273,10 @@ def update_chart_from_scenarios(selected_country, selected_branch):
         title=title_text,
         xaxis_title="Date",
         yaxis_title="Value",
-        template="plotly_dark",
+        template="plotly_white",
         legend_title="Series",
-        paper_bgcolor='rgba(0,0,0,0)',
-        plot_bgcolor='rgba(0,0,0,0)'
+        paper_bgcolor='white',
+        plot_bgcolor='white'
     )
     
     return fig
@@ -296,8 +289,8 @@ def update_chart_from_scenarios(selected_country, selected_branch):
 )
 def update_export_chart(selected_country, selected_branch):
     if not selected_country or not selected_branch:
-        return go.Figure(layout={'template': 'plotly_dark', 'title': 'No data available'})
-    
+        return go.Figure(layout={'template': 'plotly_white', 'title': 'No data available'})
+
     # Get historical data
     historical_filtered = HISTORICAL_DATA[
         (HISTORICAL_DATA['Country'] == selected_country) & 
@@ -311,16 +304,16 @@ def update_export_chart(selected_country, selected_branch):
     ].copy()
     
     if historical_filtered.empty and predictions_filtered.empty:
-        return go.Figure(layout={'template': 'plotly_dark', 'title': 'No data for selected filters'})
-    
+        return go.Figure(layout={'template': 'plotly_white', 'title': 'No data for selected filters'})
+
     # Create figure
     fig = go.Figure()
     
     # Add predictions
     if not predictions_filtered.empty:
         predictions_filtered['timestamp'] = pd.to_datetime(predictions_filtered['timestamp'])
-        predictions_filtered = predictions_filtered.sort_values('timestamp')
-        
+        predictions_filtered = predictions_filtered.sort_values(by='timestamp')
+
         # Separate by prediction type
         validation = predictions_filtered[predictions_filtered['prediction_type'] == 'Validation']
         future = predictions_filtered[predictions_filtered['prediction_type'] == 'Future']
@@ -337,8 +330,8 @@ def update_export_chart(selected_country, selected_branch):
         
         if actual_data:
             combined_actual = pd.concat(actual_data, ignore_index=True)
-            combined_actual = combined_actual.sort_values('timestamp')
-            
+            combined_actual = combined_actual.sort_values(by='timestamp')
+
             fig.add_trace(go.Scatter(
                 x=combined_actual['timestamp'],
                 y=combined_actual['y_true'],
@@ -373,11 +366,11 @@ def update_export_chart(selected_country, selected_branch):
         title=f"Export Data & Predictions: {selected_country} - {selected_branch}",
         xaxis=dict(title="Date"),
         yaxis=dict(title="Value"),
-        template="plotly_dark",
+        template="plotly_white",
         legend=dict(x=0.01, y=0.99),
         hovermode='x unified',
-        paper_bgcolor='rgba(0,0,0,0)',
-        plot_bgcolor='rgba(0,0,0,0)'
+        paper_bgcolor='white',
+        plot_bgcolor='white'
     )
     
     return fig
@@ -390,8 +383,8 @@ def update_export_chart(selected_country, selected_branch):
 )
 def update_accuracy_chart(selected_country, selected_branch):
     if not selected_country or not selected_branch:
-        return go.Figure(layout={'template': 'plotly_dark', 'title': 'Please select a Country and Branch'})
-    
+        return go.Figure(layout={'template': 'plotly_white', 'title': 'Please select a Country and Branch'})
+
     # Get predictions with actual values for comparison
     predictions_filtered = ALL_PREDICTIONS[
         (ALL_PREDICTIONS['Country'] == selected_country) & 
@@ -400,11 +393,11 @@ def update_accuracy_chart(selected_country, selected_branch):
     ].copy()
     
     if predictions_filtered.empty:
-        return go.Figure(layout={'template': 'plotly_dark', 'title': 'No validation/test data available'})
-    
+        return go.Figure(layout={'template': 'plotly_white', 'title': 'No validation/test data available'})
+
     predictions_filtered['timestamp'] = pd.to_datetime(predictions_filtered['timestamp'])
-    predictions_filtered = predictions_filtered.sort_values('timestamp')
-    
+    predictions_filtered = predictions_filtered.sort_values(by='timestamp')
+
     # Create scatter plot: actual vs predicted
     fig = go.Figure()
     
@@ -439,9 +432,9 @@ def update_accuracy_chart(selected_country, selected_branch):
         title=f"Model Accuracy: {selected_country} - {selected_branch}",
         xaxis=dict(title="Actual Value"),
         yaxis=dict(title="Predicted Value"),
-        template="plotly_dark",
-        paper_bgcolor='rgba(0,0,0,0)',
-        plot_bgcolor='rgba(0,0,0,0)',
+        template="plotly_white",
+        paper_bgcolor='white',
+        plot_bgcolor='white',
         hovermode='closest'
     )
     
@@ -455,8 +448,8 @@ def update_accuracy_chart(selected_country, selected_branch):
 )
 def update_residuals_chart(selected_country, selected_branch):
     if not selected_country or not selected_branch:
-        return go.Figure(layout={'template': 'plotly_dark', 'title': 'Please select a Country and Branch'})
-    
+        return go.Figure(layout={'template': 'plotly_white', 'title': 'Please select a Country and Branch'})
+
     # Get predictions with actual values
     predictions_filtered = ALL_PREDICTIONS[
         (ALL_PREDICTIONS['Country'] == selected_country) & 
@@ -465,10 +458,10 @@ def update_residuals_chart(selected_country, selected_branch):
     ].copy()
     
     if predictions_filtered.empty:
-        return go.Figure(layout={'template': 'plotly_dark', 'title': 'No validation/test data available'})
-    
+        return go.Figure(layout={'template': 'plotly_white', 'title': 'No validation/test data available'})
+
     predictions_filtered['timestamp'] = pd.to_datetime(predictions_filtered['timestamp'])
-    predictions_filtered = predictions_filtered.sort_values('timestamp')
+    predictions_filtered = predictions_filtered.sort_values(by='timestamp')
     predictions_filtered['residual'] = predictions_filtered['y_true'] - predictions_filtered['y_pred']
     
     fig = go.Figure()
@@ -493,9 +486,9 @@ def update_residuals_chart(selected_country, selected_branch):
         title=f"Prediction Residuals: {selected_country} - {selected_branch}",
         xaxis=dict(title="Date"),
         yaxis=dict(title="Residual (Actual - Predicted)"),
-        template="plotly_dark",
-        paper_bgcolor='rgba(0,0,0,0)',
-        plot_bgcolor='rgba(0,0,0,0)',
+        template="plotly_white",
+        paper_bgcolor='white',
+        plot_bgcolor='white',
         hovermode='x unified'
     )
     
@@ -509,8 +502,8 @@ def update_residuals_chart(selected_country, selected_branch):
 )
 def update_comparison_chart(selected_countries, selected_branch):
     if not selected_countries or not selected_branch:
-        return go.Figure(layout={'template': 'plotly_dark', 'title': 'Please select countries and a branch'})
-    
+        return go.Figure(layout={'template': 'plotly_white', 'title': 'Please select countries and a branch'})
+
     # Limit to 5 countries
     if len(selected_countries) > 5:
         selected_countries = selected_countries[:5]
@@ -528,8 +521,8 @@ def update_comparison_chart(selected_countries, selected_branch):
         
         if not hist_data.empty:
             hist_data['timestamp'] = pd.to_datetime(hist_data['timestamp'])
-            hist_data = hist_data.sort_values('timestamp')
-            
+            hist_data = hist_data.sort_values(by='timestamp')
+
             fig.add_trace(go.Scatter(
                 x=hist_data['timestamp'],
                 y=hist_data['y_true'],
@@ -548,8 +541,8 @@ def update_comparison_chart(selected_countries, selected_branch):
         
         if not forecast_data.empty:
             forecast_data['timestamp'] = pd.to_datetime(forecast_data['timestamp'])
-            forecast_data = forecast_data.sort_values('timestamp')
-            
+            forecast_data = forecast_data.sort_values(by='timestamp')
+
             fig.add_trace(go.Scatter(
                 x=forecast_data['timestamp'],
                 y=forecast_data['y_pred'],
@@ -564,9 +557,9 @@ def update_comparison_chart(selected_countries, selected_branch):
         title=f"Country Comparison: {selected_branch}",
         xaxis=dict(title="Date"),
         yaxis=dict(title="Value"),
-        template="plotly_dark",
-        paper_bgcolor='rgba(0,0,0,0)',
-        plot_bgcolor='rgba(0,0,0,0)',
+        template="plotly_white",
+        paper_bgcolor='white',
+        plot_bgcolor='white',
         hovermode='x unified',
         legend=dict(x=0.01, y=0.99)
     )
