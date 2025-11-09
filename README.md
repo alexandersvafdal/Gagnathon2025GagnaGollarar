@@ -108,7 +108,72 @@ Our solution was built to meet the datathon's official criteria:
 * **User relevance (1-5):** The tool provides a high-value simulation dashboard for economists, academics, and policymakers (like our target judges from Statistics Iceland) to test scenarios.
 ---
 
-### 👥 Team Members
+### 📊 Data Format Specification
+
+> **📄 For detailed data format documentation with visual diagrams, see [DATA_FORMAT.md](DATA_FORMAT.md)**
+
+### Quick Reference
+
+The application expects two Parquet files in the `app/` directory:
+
+#### `historical_data.parquet`
+Contains historical export data with the following schema:
+
+| Column | Type | Description |
+|--------|------|-------------|
+| `timestamp` | datetime64 | Date of the observation (monthly data) |
+| `Country` | string | Export destination country |
+| `Branches` | string | Industry sector/branch (e.g., "FISH TOTAL", "AL TOTAL") |
+| `y_true` | float64 | Actual export value in millions ISK |
+| `prediction_type` | string | Should be `null` or empty for historical data |
+
+#### `all_predictions.parquet`
+Contains model predictions with the following schema:
+
+| Column | Type | Description |
+|--------|------|-------------|
+| `timestamp` | datetime64 | Date of the prediction (monthly data) |
+| `Country` | string | Export destination country |
+| `Branches` | string | Industry sector/branch |
+| `y_pred` | float64 | Predicted export value in millions ISK |
+| `y_true` | float64 | Actual value (for validation period) or `null` (for future predictions) |
+| `prediction_type` | string | Either "Validation" (past data with known actuals) or "Future" (forecast) |
+
+**Notes:**
+- Both files are merged on load, with the `value` column computed as `y_true.fillna(y_pred)`
+- All monetary values are in **millions of Icelandic Króna (ISK)**
+- The `timestamp` should be the first day of each month
+- Missing values in `y_true` indicate future forecasts without known outcomes
+
+**Example of generating the files:**
+```python
+import pandas as pd
+
+# Historical data example
+historical_df = pd.DataFrame({
+    'timestamp': pd.date_range('2015-01-01', '2024-12-01', freq='MS'),
+    'Country': 'Netherlands',
+    'Branches': 'FISH TOTAL',
+    'y_true': [...],  # actual values
+    'prediction_type': None
+})
+historical_df.to_parquet('app/historical_data.parquet')
+
+# Predictions example
+predictions_df = pd.DataFrame({
+    'timestamp': pd.date_range('2023-01-01', '2026-12-01', freq='MS'),
+    'Country': 'Netherlands',
+    'Branches': 'FISH TOTAL',
+    'y_pred': [...],  # predicted values
+    'y_true': [...],  # actuals for validation period, NaN for future
+    'prediction_type': ['Validation'] * 24 + ['Future'] * 24
+})
+predictions_df.to_parquet('app/all_predictions.parquet')
+```
+
+---
+
+### �👥 Team Members
 * Alexander Svarfdal Guðmundsson
 * Birgir Snær Ingason
 * Elvar Þór Sævarsson
