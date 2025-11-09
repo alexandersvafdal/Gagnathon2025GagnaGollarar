@@ -5,6 +5,8 @@ import plotly.graph_objects as go
 import pandas as pd
 import warnings
 import dash_ag_grid as dag
+import os
+from pathlib import Path
 
 # Suppress warnings
 warnings.filterwarnings('ignore', category=FutureWarning)
@@ -27,10 +29,29 @@ COLOR_ACCENT_RED = "#DC3545"
 COMPARISON_COLORS = [COLOR_PRIMARY_BLUE, COLOR_VALIDATION_TEAL, COLOR_RESIDUAL_ORANGE, COLOR_ACCENT_PURPLE, COLOR_ACCENT_RED]
 PLOTLY_TEMPLATE = "plotly_white"
 
+# --- SCAN PREDICTION FILES ---
+PREDICTION_FOLDER = Path('perdictions')
+PREDICTION_FILES = []
+if PREDICTION_FOLDER.exists():
+    PREDICTION_FILES = sorted([f.name for f in PREDICTION_FOLDER.glob('*.parquet')])
+
+# Create dropdown options - only show prediction model files
+if PREDICTION_FILES:
+    PREDICTION_OPTIONS = [{'label': f, 'value': f} for f in PREDICTION_FILES]
+    DEFAULT_PREDICTION_VALUE = PREDICTION_FILES[0]
+else:
+    PREDICTION_OPTIONS = [{'label': 'No Models', 'value': None}]
+    DEFAULT_PREDICTION_VALUE = None
+
 # --- LOAD HISTORICAL DATA AND PREDICTIONS ---
 try:
-    HISTORICAL_DATA = pd.read_parquet('app/historical_data.parquet')
-    ALL_PREDICTIONS = pd.read_parquet('app/all_predictions.parquet')
+    HISTORICAL_DATA = pd.read_parquet('historical_data.parquet')
+    
+    # Load default predictions from perdictions folder or use first available model
+    if DEFAULT_PREDICTION_VALUE:
+        ALL_PREDICTIONS = pd.read_parquet(f'perdictions/{DEFAULT_PREDICTION_VALUE}')
+    else:
+        ALL_PREDICTIONS = pd.DataFrame()
     
     COMBINED_DATA = pd.concat([HISTORICAL_DATA, ALL_PREDICTIONS], ignore_index=True)
     
@@ -67,17 +88,39 @@ server = app.server
 navbar = dbc.Navbar(
     dbc.Container(
         [
-            html.A(
-                dbc.Row(
-                    [
-                        dbc.Col(html.I(className="fa-solid fa-chart-line me-2", style={'color': COLOR_PRIMARY_BLUE})),
-                        dbc.Col(dbc.NavbarBrand("Icelandic Export Data & Predictions", className="app-header")),
-                    ],
-                    align="center",
-                    className="g-0",
-                ),
-                href="#",
-                style={"textDecoration": "none"},
+            dbc.Row(
+                [
+                    dbc.Col(
+                        html.A(
+                            dbc.Row(
+                                [
+                                    dbc.Col(html.I(className="fa-solid fa-chart-line me-2", style={'color': COLOR_PRIMARY_BLUE})),
+                                    dbc.Col(dbc.NavbarBrand("Icelandic Export Data & Predictions", className="app-header")),
+                                ],
+                                align="center",
+                                className="g-0",
+                            ),
+                            href="#",
+                            style={"textDecoration": "none"},
+                        ),
+                        width="auto"
+                    ),
+                    dbc.Col(
+                        dcc.Dropdown(
+                            id='prediction-file-dropdown',
+                            options=PREDICTION_OPTIONS,
+                            value=DEFAULT_PREDICTION_VALUE,
+                            clearable=False,
+                            className='custom-dropdown',
+                            style={'minWidth': '300px'},
+                            disabled=(DEFAULT_PREDICTION_VALUE is None)
+                        ),
+                        width="auto",
+                        className="ms-auto"
+                    ),
+                ],
+                align="center",
+                className="g-2 w-100"
             ),
         ],
         fluid=True
@@ -497,8 +540,45 @@ data_table_tab = html.Div([
 ])
 
 
+# --- Helper function to load data efficiently ---
+# NOTE: This approach stores only the filename in dcc.Store instead of the entire dataset.
+# This significantly improves performance by avoiding large JSON serialization on every callback.
+# Each callback loads data on-demand from disk, which is faster than serializing/deserializing
+# large DataFrames through the browser.
+def get_predictions_and_combined(prediction_filename):
+    """Load prediction file and combine with historical data
+    
+    Args:
+        prediction_filename: Name of the parquet file in perdictions folder
+        
+    Returns:
+        tuple: (predictions_df, combined_df)
+    """
+    if not prediction_filename:
+        return pd.DataFrame(), HISTORICAL_DATA.copy()
+    
+    try:
+        # Load the prediction file
+        predictions = pd.read_parquet(f'perdictions/{prediction_filename}')
+        
+        # Combine with historical data
+        combined = pd.concat([HISTORICAL_DATA, predictions], ignore_index=True)
+        combined['timestamp'] = pd.to_datetime(combined['timestamp'])
+        combined['year'] = combined['timestamp'].dt.year
+        combined['value'] = combined['y_true'].fillna(combined['y_pred'])
+        combined['value'] = combined['value'].round(2)
+        combined['y_true'] = combined['y_true'].round(2)
+        combined['y_pred'] = combined['y_pred'].round(2)
+        
+        return predictions, combined
+    except Exception as e:
+        print(f"Error loading prediction file {prediction_filename}: {e}")
+        return pd.DataFrame(), HISTORICAL_DATA.copy()
+
+
 # --- == Main Layout == ---
 app.layout = html.Div([
+    dcc.Store(id='selected-prediction-file', data=DEFAULT_PREDICTION_VALUE),
     navbar,
     dbc.Container(
         dbc.Tabs(id='main-tabs', children=[
@@ -526,16 +606,21 @@ app.layout = html.Div([
     Output('overview-top-countries-bar', 'figure'),
     Output('overview-top-sectors-bar', 'figure'),
     Input('overview-year-dropdown', 'value'),
-    Input('overview-branch-dropdown', 'value')
+    Input('overview-branch-dropdown', 'value'),
+    Input('selected-prediction-file', 'data')
 )
-def update_overview_tab(selected_year, selected_sector):
+def update_overview_tab(selected_year, selected_sector, prediction_filename):
     if not selected_year:
         empty_kpi = [html.H5("No Data"), html.H3("-")]
         empty_fig = create_empty_fig("Please select a year")
         return empty_kpi, empty_kpi, empty_kpi, empty_kpi, empty_fig, empty_fig, empty_fig
 
-    dff_current_year = COMBINED_DATA[COMBINED_DATA['year'] == selected_year]
-    dff_prev_year = COMBINED_DATA[COMBINED_DATA['year'] == selected_year - 1]
+    _, combined_df = get_predictions_and_combined(prediction_filename)
+    combined_df['timestamp'] = pd.to_datetime(combined_df['timestamp'])
+    combined_df['year'] = combined_df['timestamp'].dt.year
+    
+    dff_current_year = combined_df[combined_df['year'] == selected_year]
+    dff_prev_year = combined_df[combined_df['year'] == selected_year - 1]
 
     if selected_sector:
         dff_current_year = dff_current_year[dff_current_year['Branches'] == selected_sector]
@@ -667,16 +752,29 @@ def update_overview_tab(selected_year, selected_sector):
     )
 
 
+# --- Callback to load different prediction files ---
+@app.callback(
+    Output('selected-prediction-file', 'data'),
+    Input('prediction-file-dropdown', 'value')
+)
+def load_prediction_file(selected_file):
+    """Store only the filename, not the data itself"""
+    return selected_file
+
+
 # --- Callbacks for "Single Series Analysis" Tab ---
 @app.callback(
     Output('country-dropdown', 'options'),
     Output('country-dropdown', 'value'),
-    Input('branch-dropdown', 'value')
+    Input('branch-dropdown', 'value'),
+    Input('selected-prediction-file', 'data')
 )
-def update_country_dropdown(selected_branch):
-    if not selected_branch or COMBINED_DATA is None:
-        return [], None
-    filtered_countries = COMBINED_DATA[COMBINED_DATA['Branches'] == selected_branch]['Country'].dropna().unique()
+def update_country_dropdown(selected_branch, prediction_filename):
+    if not selected_branch:
+        return [{'label': 'All Countries', 'value': 'ALL'}], 'ALL'
+    
+    _, combined_df = get_predictions_and_combined(prediction_filename)
+    filtered_countries = combined_df[combined_df['Branches'] == selected_branch]['Country'].dropna().unique()
     country_options = [{'label': 'All Countries', 'value': 'ALL'}]
     country_options.extend([{'label': country, 'value': country} for country in sorted(filtered_countries)])
     default_value = 'ALL'  # Default to "All Countries"
@@ -700,11 +798,18 @@ def reset_sliders(n_clicks):
     Input('exchange-rate-slider', 'value'),
     Input('inflation-slider', 'value'),
     Input('demand-slider', 'value'),
-    Input('capacity-slider', 'value')
+    Input('capacity-slider', 'value'),
+    Input('selected-prediction-file', 'data')
 )
-def update_main_forecast_chart(selected_country, selected_branch, exchange_rate, inflation, demand, capacity):
+def update_main_forecast_chart(selected_country, selected_branch, exchange_rate, inflation, demand, capacity, prediction_filename):
     if not selected_branch:
         return create_empty_fig("Please select a Branch")
+    
+    # Load data efficiently
+    predictions_df, _ = get_predictions_and_combined(prediction_filename)
+    
+    if predictions_df.empty:
+        return create_empty_fig("No prediction data available")
     
     fig = go.Figure()
     
@@ -713,13 +818,13 @@ def update_main_forecast_chart(selected_country, selected_branch, exchange_rate,
         dff_hist = HISTORICAL_DATA[
             (HISTORICAL_DATA['Country'] == selected_country) & (HISTORICAL_DATA['Branches'] == selected_branch)
         ].copy()
-        dff_preds = ALL_PREDICTIONS[
-            (ALL_PREDICTIONS['Country'] == selected_country) & (ALL_PREDICTIONS['Branches'] == selected_branch)
+        dff_preds = predictions_df[
+            (predictions_df['Country'] == selected_country) & (predictions_df['Branches'] == selected_branch)
         ].copy()
     else:
         # Aggregate all countries for this branch
         dff_hist = HISTORICAL_DATA[HISTORICAL_DATA['Branches'] == selected_branch].copy()
-        dff_preds = ALL_PREDICTIONS[ALL_PREDICTIONS['Branches'] == selected_branch].copy()
+        dff_preds = predictions_df[predictions_df['Branches'] == selected_branch].copy()
         
         # Group by timestamp to aggregate values
         if not dff_hist.empty:
@@ -791,9 +896,9 @@ def update_main_forecast_chart(selected_country, selected_branch, exchange_rate,
     
     # Simple title: Branch * Country
     if selected_country and selected_country != 'ALL':
-        title_text = f"Branch * Country"
+        title_text = f"Branch vs. Country"
     else:
-        title_text = f"Branch * Country"
+        title_text = f"Branch vs. Country"
     
     fig.update_layout(
         title=title_text, 
@@ -806,22 +911,28 @@ def update_main_forecast_chart(selected_country, selected_branch, exchange_rate,
 @app.callback(
     Output('accuracy-chart', 'figure'),
     Input('country-dropdown', 'value'),
-    Input('branch-dropdown', 'value')
+    Input('branch-dropdown', 'value'),
+    Input('selected-prediction-file', 'data')
 )
-def update_accuracy_chart(selected_country, selected_branch):
+def update_accuracy_chart(selected_country, selected_branch, prediction_filename):
     if not selected_branch:
         return create_empty_fig("Select branch to see accuracy")
     
+    predictions_df, _ = get_predictions_and_combined(prediction_filename)
+    
+    if predictions_df.empty:
+        return create_empty_fig("No prediction data available")
+    
     if selected_country and selected_country != 'ALL':
-        predictions_filtered = ALL_PREDICTIONS[
-            (ALL_PREDICTIONS['Country'] == selected_country) & 
-            (ALL_PREDICTIONS['Branches'] == selected_branch) &
-            (ALL_PREDICTIONS['y_true'].notna())
+        predictions_filtered = predictions_df[
+            (predictions_df['Country'] == selected_country) & 
+            (predictions_df['Branches'] == selected_branch) &
+            (predictions_df['y_true'].notna())
         ].copy()
     else:
-        predictions_filtered = ALL_PREDICTIONS[
-            (ALL_PREDICTIONS['Branches'] == selected_branch) &
-            (ALL_PREDICTIONS['y_true'].notna())
+        predictions_filtered = predictions_df[
+            (predictions_df['Branches'] == selected_branch) &
+            (predictions_df['y_true'].notna())
         ].copy()
         # Aggregate by timestamp
         predictions_filtered = predictions_filtered.groupby('timestamp').agg({
@@ -861,22 +972,28 @@ def update_accuracy_chart(selected_country, selected_branch):
 @app.callback(
     Output('residuals-chart', 'figure'),
     Input('country-dropdown', 'value'),
-    Input('branch-dropdown', 'value')
+    Input('branch-dropdown', 'value'),
+    Input('selected-prediction-file', 'data')
 )
-def update_residuals_chart(selected_country, selected_branch):
+def update_residuals_chart(selected_country, selected_branch, prediction_filename):
     if not selected_branch:
         return create_empty_fig("Select branch to see residuals")
     
+    predictions_df, _ = get_predictions_and_combined(prediction_filename)
+    
+    if predictions_df.empty:
+        return create_empty_fig("No prediction data available")
+    
     if selected_country and selected_country != 'ALL':
-        predictions_filtered = ALL_PREDICTIONS[
-            (ALL_PREDICTIONS['Country'] == selected_country) & 
-            (ALL_PREDICTIONS['Branches'] == selected_branch) &
-            (ALL_PREDICTIONS['y_true'].notna())
+        predictions_filtered = predictions_df[
+            (predictions_df['Country'] == selected_country) & 
+            (predictions_df['Branches'] == selected_branch) &
+            (predictions_df['y_true'].notna())
         ].copy()
     else:
-        predictions_filtered = ALL_PREDICTIONS[
-            (ALL_PREDICTIONS['Branches'] == selected_branch) &
-            (ALL_PREDICTIONS['y_true'].notna())
+        predictions_filtered = predictions_df[
+            (predictions_df['Branches'] == selected_branch) &
+            (predictions_df['y_true'].notna())
         ].copy()
         # Aggregate by timestamp
         predictions_filtered = predictions_filtered.groupby('timestamp').agg({
@@ -911,22 +1028,28 @@ def update_residuals_chart(selected_country, selected_branch):
 @app.callback(
     Output('residuals-hist', 'figure'),
     Input('country-dropdown', 'value'),
-    Input('branch-dropdown', 'value')
+    Input('branch-dropdown', 'value'),
+    Input('selected-prediction-file', 'data')
 )
-def update_residuals_hist(selected_country, selected_branch):
+def update_residuals_hist(selected_country, selected_branch, prediction_filename):
     if not selected_branch:
         return create_empty_fig("Select branch for histogram")
     
+    predictions_df, _ = get_predictions_and_combined(prediction_filename)
+    
+    if predictions_df.empty:
+        return create_empty_fig("No prediction data available")
+    
     if selected_country and selected_country != 'ALL':
-        predictions_filtered = ALL_PREDICTIONS[
-            (ALL_PREDICTIONS['Country'] == selected_country) & 
-            (ALL_PREDICTIONS['Branches'] == selected_branch) &
-            (ALL_PREDICTIONS['y_true'].notna())
+        predictions_filtered = predictions_df[
+            (predictions_df['Country'] == selected_country) & 
+            (predictions_df['Branches'] == selected_branch) &
+            (predictions_df['y_true'].notna())
         ].copy()
     else:
-        predictions_filtered = ALL_PREDICTIONS[
-            (ALL_PREDICTIONS['Branches'] == selected_branch) &
-            (ALL_PREDICTIONS['y_true'].notna())
+        predictions_filtered = predictions_df[
+            (predictions_df['Branches'] == selected_branch) &
+            (predictions_df['y_true'].notna())
         ].copy()
         # Aggregate by timestamp
         predictions_filtered = predictions_filtered.groupby('timestamp').agg({
@@ -971,15 +1094,20 @@ def update_residuals_hist(selected_country, selected_branch):
 @app.callback(
     Output('comparison-chart', 'figure'),
     Input('comparison-branch-dropdown', 'value'),
-    Input('comparison-countries', 'value')
+    Input('comparison-countries', 'value'),
+    Input('selected-prediction-file', 'data')
 )
-def update_comparison_chart(selected_branch, selected_countries):
+def update_comparison_chart(selected_branch, selected_countries, prediction_filename):
     if not selected_countries or not selected_branch:
         return create_empty_fig("Please select a sector and countries to compare")
     
     if len(selected_countries) > 5:
         selected_countries = selected_countries[:5]
     
+    predictions_df, _ = get_predictions_and_combined(prediction_filename)
+    
+    if predictions_df.empty:
+        return create_empty_fig("No prediction data available")
     fig = go.Figure()
     
     for idx, country in enumerate(selected_countries):
@@ -998,10 +1126,10 @@ def update_comparison_chart(selected_branch, selected_countries):
                 line=dict(color=color, width=2), opacity=0.9
             ))
         
-        forecast_data = ALL_PREDICTIONS[
-            (ALL_PREDICTIONS['Country'] == country) & 
-            (ALL_PREDICTIONS['Branches'] == selected_branch) &
-            (ALL_PREDICTIONS['prediction_type'] == 'Future')
+        forecast_data = predictions_df[
+            (predictions_df['Country'] == country) & 
+            (predictions_df['Branches'] == selected_branch) &
+            (predictions_df['prediction_type'] == 'Future')
         ].copy()
         if not forecast_data.empty:
             forecast_data['timestamp'] = pd.to_datetime(forecast_data['timestamp'])
@@ -1026,13 +1154,18 @@ def update_comparison_chart(selected_branch, selected_countries):
     Output('custom-pie-chart', 'figure'),
     Input('pie-year-dropdown', 'value'),
     Input('pie-country-dropdown', 'value'),
-    Input('pie-branch-dropdown', 'value')
+    Input('pie-branch-dropdown', 'value'),
+    Input('selected-prediction-file', 'data')
 )
-def update_pie_chart(selected_year, selected_countries, selected_branches):
+def update_pie_chart(selected_year, selected_countries, selected_branches, prediction_filename):
     if not selected_year:
         return create_empty_fig("Please select a year")
     
-    dff = COMBINED_DATA[COMBINED_DATA['year'] == selected_year].copy()
+    _, combined_df = get_predictions_and_combined(prediction_filename)
+    combined_df['timestamp'] = pd.to_datetime(combined_df['timestamp'])
+    combined_df['year'] = combined_df['timestamp'].dt.year
+    
+    dff = combined_df[combined_df['year'] == selected_year].copy()
     
     if selected_countries:
         dff = dff[dff['Country'].isin(selected_countries)]
@@ -1073,10 +1206,15 @@ def update_pie_chart(selected_year, selected_countries, selected_branches):
     Output('data-export-grid', 'rowData'),
     Input('table-year-dropdown', 'value'),
     Input('table-country-dropdown', 'value'),
-    Input('table-branch-dropdown', 'value')
+    Input('table-branch-dropdown', 'value'),
+    Input('selected-prediction-file', 'data')
 )
-def update_data_table(selected_years, selected_countries, selected_branches):
-    dff = COMBINED_DATA.copy()
+def update_data_table(selected_years, selected_countries, selected_branches, prediction_filename):
+    _, combined_df = get_predictions_and_combined(prediction_filename)
+    combined_df['timestamp'] = pd.to_datetime(combined_df['timestamp'])
+    combined_df['year'] = combined_df['timestamp'].dt.year
+    
+    dff = combined_df.copy()
     
     if selected_years:
         dff = dff[dff['year'].isin(selected_years)]
