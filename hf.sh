@@ -17,7 +17,7 @@ license: unknown
 app_port: 8050
 ---
 EOF
-cp -r ./app ./Dockerfile ./requirements.txt ./README.md hf/
+cp -r ./app ./Dockerfile ./uv.lock ./pyproject.toml ./README.md hf/
 cd hf
 
 # global git setup
