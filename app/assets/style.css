@@ -142,19 +142,33 @@ h1, h2, h3, h4, h5, h6, .card-title {
 .kpi-card-body {
     padding: 20px;
     position: relative;
-    min-height: 120px; /* Give cards a uniform height */
     display: flex;
     flex-direction: column;
     justify-content: center;
 }
 
+/* Make KPI row columns equal height */
+.kpi-row {
+    display: flex;
+}
+
+.kpi-row > [class*='col-'] {
+    display: flex;
+}
+
+.kpi-row .card {
+    width: 100%;
+    display: flex;
+    flex-direction: column;
+}
+
 .kpi-card-body .kpi-title {
-    font-size: 0.9rem;
+    font-size: 0.85rem;
     font-weight: 600;
     color: #6C757D; /* Muted gray text */
     text-transform: uppercase;
     letter-spacing: 0.5px;
-    margin-bottom: 8px;
+    margin-bottom: 6px;
 }
 
 .kpi-card-body .kpi-value {
@@ -166,18 +180,112 @@ h1, h2, h3, h4, h5, h6, .card-title {
 }
 
 .kpi-card-body .kpi-value {
-    font-size: 1.75rem;
+    font-size: 1.5rem;
     font-weight: 700;
     color: #212529; /* Dark heading text */
-    line-height: 1.2;
+    line-height: 1.3;
     margin-bottom: 0;
-
-    /* --- ADD THESE 3 LINES --- */
-    white-space: nowrap;     /* Prevents text from wrapping */
-    overflow: hidden;        /* Hides anything that goes past the edge */
-    text-overflow: ellipsis; /* Adds the "..." */
+    word-wrap: break-word;
+    overflow-wrap: break-word;
+    white-space: normal; /* Allow text to wrap */
 }
 .kpi-card-body .kpi-value .text-muted {
     font-size: 0.9rem;
     font-weight: 400;
+}
+
+/* --- == Custom Slider Styles == --- */
+/* Slider container */
+.rc-slider {
+    margin: 15px 0 25px 0;
+    padding: 0;
+}
+
+/* Slider rail (background track) */
+.rc-slider-rail {
+    background-color: #E9ECEF;
+    height: 4px;
+    border-radius: 2px;
+}
+
+/* Slider track (filled portion) - Pastel purple matching adjusted forecast */
+.rc-slider-track {
+    background-color: #B8A5D6;
+    height: 4px;
+    border-radius: 2px;
+}
+
+/* Slider handle (draggable thumb) */
+.rc-slider-handle {
+    width: 14px;
+    height: 14px;
+    border: 2px solid #B8A5D6;
+    background-color: #FFFFFF;
+    box-shadow: 0 1px 4px rgba(111, 66, 193, 0.2);
+    margin-top: -5px;
+    border-radius: 50%;
+    cursor: pointer;
+    transition: all 0.15s ease-in-out;
+}
+
+.rc-slider-handle:hover {
+    border-color: #9B7FC4;
+    box-shadow: 0 2px 6px rgba(111, 66, 193, 0.3);
+    transform: scale(1.05);
+}
+
+.rc-slider-handle:active {
+    border-color: #8B6FB3;
+    box-shadow: 0 1px 4px rgba(111, 66, 193, 0.4);
+    transform: scale(1);
+}
+
+.rc-slider-handle:focus {
+    border-color: #9B7FC4;
+    outline: none;
+    box-shadow: 0 0 0 3px rgba(111, 66, 193, 0.15);
+}
+
+/* Slider marks (labels) */
+.rc-slider-mark-text {
+    font-size: 0.7rem;
+    color: #6C757D;
+    font-weight: 500;
+}
+
+.rc-slider-mark-text-active {
+    color: #212529;
+    font-weight: 600;
+}
+
+/* Slider dots */
+.rc-slider-dot {
+    border: 2px solid #E9ECEF;
+    background-color: #FFFFFF;
+    width: 8px;
+    height: 8px;
+    bottom: -2px;
+}
+
+.rc-slider-dot-active {
+    border-color: #B8A5D6;
+    background-color: #B8A5D6;
+}
+
+/* Tooltip styling */
+.rc-slider-tooltip {
+    pointer-events: none;
+}
+
+.rc-slider-tooltip-inner {
+    background-color: #212529;
+    color: #FFFFFF;
+    font-size: 0.75rem;
+    padding: 4px 8px;
+    border-radius: 4px;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+}
+
+.rc-slider-tooltip-arrow {
+    border-top-color: #212529;
 }

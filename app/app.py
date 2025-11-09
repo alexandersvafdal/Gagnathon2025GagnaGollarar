@@ -29,8 +29,8 @@ PLOTLY_TEMPLATE = "plotly_white"
 
 # --- LOAD HISTORICAL DATA AND PREDICTIONS ---
 try:
-    HISTORICAL_DATA = pd.read_parquet('../historical_data.parquet')
-    ALL_PREDICTIONS = pd.read_parquet('../all_predictions.parquet')
+    HISTORICAL_DATA = pd.read_parquet('historical_data.parquet')
+    ALL_PREDICTIONS = pd.read_parquet('all_predictions.parquet')
     
     COMBINED_DATA = pd.concat([HISTORICAL_DATA, ALL_PREDICTIONS], ignore_index=True)
     
@@ -171,14 +171,13 @@ overview_tab = html.Div([
         ], md=12)
     ], className="mb-4"),
     
-    # Second row: KPI Cards (MODIFIED)
+    # Second row: KPI Cards
     dbc.Row([
-        # Removed align-items-stretch and h-100. Relies on CSS min-height.
-        dbc.Col(dbc.Card(dbc.CardBody(id='kpi-total-value', className="kpi-card-body")), md=3),
-        dbc.Col(dbc.Card(dbc.CardBody(id='kpi-yoy-change', className="kpi-card-body")), md=3),
-        dbc.Col(dbc.Card(dbc.CardBody(id='kpi-top-country', className="kpi-card-body")), md=3),
-        dbc.Col(dbc.Card(dbc.CardBody(id='kpi-top-sector', className="kpi-card-body")), md=3),
-    ], className="mb-4"), 
+        dbc.Col(dbc.Card(dbc.CardBody(id='kpi-total-value', className="kpi-card-body"), className="h-100 graph-card"), md=3, className="d-flex"),
+        dbc.Col(dbc.Card(dbc.CardBody(id='kpi-yoy-change', className="kpi-card-body"), className="h-100 graph-card"), md=3, className="d-flex"),
+        dbc.Col(dbc.Card(dbc.CardBody(id='kpi-top-country', className="kpi-card-body"), className="h-100 graph-card"), md=3, className="d-flex"),
+        dbc.Col(dbc.Card(dbc.CardBody(id='kpi-top-sector', className="kpi-card-body"), className="h-100 graph-card"), md=3, className="d-flex"),
+    ], className="mb-4 kpi-row"), 
     
     # Third row: Map and Top 5 Charts (MODIFIED)
     dbc.Row([
@@ -200,18 +199,17 @@ overview_tab = html.Div([
                     dbc.Col(
                         dbc.Card(
                             dbc.CardBody(
-                                # Explicit, balanced heights on the graphs
-                                dcc.Graph(id='overview-top-countries-bar', style={'height': '28.5vh'}) 
+                                dcc.Graph(id='overview-top-countries-bar', style={'height': '27vh'}) 
                             ),
                             className="graph-card"
                         )
                     ), 
-                className="mb-4"), # Use bootstrap margin
+                className="mb-2"),
                 dbc.Row(
                     dbc.Col(
                         dbc.Card(
                             dbc.CardBody(
-                                dcc.Graph(id='overview-top-sectors-bar', style={'height': '28.5vh'})
+                                dcc.Graph(id='overview-top-sectors-bar', style={'height': '27vh'})
                             ),
                             className="graph-card"
                         )
@@ -249,6 +247,65 @@ dashboard_sidebar = dbc.Col(
                 ),
             ]),
             className="sidebar-card",
+        ),
+        dbc.Card(
+            dbc.CardBody([
+                html.H4([html.I(className="fa-solid fa-sliders me-2"), " Forecast Adjustments"], className="card-title"),
+                html.Hr(),
+                
+                html.Label("Exchange Rate Impact", className="form-label"),
+                html.P("ISK/EUR exchange rate change", className="text-muted", style={'fontSize': '0.75rem', 'marginBottom': '0.5rem'}),
+                dcc.Slider(
+                    id='exchange-rate-slider',
+                    min=-20,
+                    max=20,
+                    step=1,
+                    value=0,
+                    marks={-20: '-20%', -10: '-10%', 0: '0%', 10: '+10%', 20: '+20%'},
+                    tooltip={"placement": "bottom", "always_visible": False}
+                ),
+                
+                html.Label("Inflation Rate", className="form-label mt-3"),
+                html.P("Expected inflation impact", className="text-muted", style={'fontSize': '0.75rem', 'marginBottom': '0.5rem'}),
+                dcc.Slider(
+                    id='inflation-slider',
+                    min=-10,
+                    max=10,
+                    step=0.5,
+                    value=0,
+                    marks={-10: '-10%', -5: '-5%', 0: '0%', 5: '+5%', 10: '+10%'},
+                    tooltip={"placement": "bottom", "always_visible": False}
+                ),
+                
+                html.Label("Market Demand", className="form-label mt-3"),
+                html.P("Global demand changes", className="text-muted", style={'fontSize': '0.75rem', 'marginBottom': '0.5rem'}),
+                dcc.Slider(
+                    id='demand-slider',
+                    min=-30,
+                    max=30,
+                    step=5,
+                    value=0,
+                    marks={-30: '-30%', -15: '-15%', 0: '0%', 15: '+15%', 30: '+30%'},
+                    tooltip={"placement": "bottom", "always_visible": False}
+                ),
+                
+                html.Label("Production Capacity", className="form-label mt-3"),
+                html.P("Change in output capacity", className="text-muted", style={'fontSize': '0.75rem', 'marginBottom': '0.5rem'}),
+                dcc.Slider(
+                    id='capacity-slider',
+                    min=-25,
+                    max=25,
+                    step=5,
+                    value=0,
+                    marks={-25: '-25%', 0: '0%', 25: '+25%'},
+                    tooltip={"placement": "bottom", "always_visible": False}
+                ),
+                
+                html.Div([
+                    dbc.Button("Reset All", id="reset-sliders-btn", color="secondary", size="sm", className="w-100 mt-3")
+                ])
+            ]),
+            className="sidebar-card mt-3",
         ),
     ],
     md=3,
@@ -488,7 +545,7 @@ def update_overview_tab(selected_year, selected_sector):
     total_value = dff_current_year['value'].sum()
     kpi_total_val_children = [
         html.H5("Total Export Value", className="kpi-title"),
-        html.H3(f"${total_value:,.0f}", className="kpi-value")
+        html.H3(f"{total_value:,.0f}M ISK", className="kpi-value")
     ]
     
     prev_total_value = dff_prev_year['value'].sum()
@@ -509,7 +566,7 @@ def update_overview_tab(selected_year, selected_sector):
         kpi_top_country_children = [
             html.H5("Top Country", className="kpi-title"),
             html.H3(top_country_name, className="kpi-value"),
-            html.P(f"${top_country_value:,.0f}", className="text-muted mb-0")
+            html.P(f"{top_country_value:,.0f}M ISK", className="text-muted mb-0")
         ]
 
     kpi_top_sector_children = [html.H5("Top Sector", className="kpi-title"), html.H3("-", className="kpi-value")]
@@ -519,25 +576,54 @@ def update_overview_tab(selected_year, selected_sector):
         kpi_top_sector_children = [
             html.H5("Top Sector", className="kpi-title"),
             html.H3(top_sector_name, className="kpi-value"),
-            html.P(f"${top_sector_value:,.0f}", className="text-muted mb-0")
+            html.P(f"{top_sector_value:,.0f}M ISK", className="text-muted mb-0")
         ]
 
     # --- Map Figure ---
     map_data = dff_current_year.groupby('Country')['value'].sum().reset_index()
-    map_fig = go.Figure(go.Choropleth(
-        locations=map_data['Country'], locationmode='country names', z=map_data['value'],
-        colorscale='Blues', colorbar_title="Export Value",
-        marker_line_color='darkgray', marker_line_width=0.5
+    map_fig = go.Figure()
+    
+    # Add Iceland outline (always visible)
+    map_fig.add_trace(go.Choropleth(
+        locations=['Iceland'], 
+        locationmode='country names', 
+        z=[0],  # No data value
+        colorscale=[[0, '#E8F4F8'], [1, '#E8F4F8']],  # Light blue color
+        showscale=False,
+        marker_line_color='DarkGray', 
+        marker_line_width=1,
+        hovertemplate='<b>Iceland</b><br>Origin Country<extra></extra>',
+        name='Iceland (Origin)'
     ))
+    
+    # Add export data for other countries
+    map_fig.add_trace(go.Choropleth(
+        locations=map_data['Country'], 
+        locationmode='country names', 
+        z=map_data['value'],
+        colorscale='Blues', 
+        colorbar_title="Export Value (M ISK)",
+        marker_line_color='darkgray', 
+        marker_line_width=0.5,
+        hovertemplate='<b>%{location}</b><br>Export Value: %{z:,.0f}M ISK<extra></extra>',
+        name='Exports'
+    ))
+    
     map_title = f'Global Export Distribution {selected_year}'
     if selected_sector:
         map_title += f' | Sector: {selected_sector}'
     map_fig.update_layout(
         title_text=map_title,
         template=PLOTLY_TEMPLATE,
-        geo=dict(showframe=False, showcoastlines=False, projection_type='mercator'),
-        margin=dict(l=0, r=0, t=40, b=0),
-        transition_duration=500
+        geo=dict(
+            showframe=False, 
+            showcoastlines=False, 
+            projection_type='natural earth',
+            projection_scale=1.0
+        ),
+        margin=dict(l=0, r=0, t=40, b=0, pad=0),
+        transition_duration=500,
+        showlegend=False
     )
     
     # --- Bar Charts ---
@@ -546,7 +632,7 @@ def update_overview_tab(selected_year, selected_sector):
 
     country_bar_fig = go.Figure(go.Bar(
         y=top_5_countries.index, x=top_5_countries.values, orientation='h',
-        text=top_5_countries.values, texttemplate='$%{x:,.0f}', textposition='outside',
+        text=top_5_countries.values, texttemplate='%{x:,.0f}M ISK', textposition='outside',
         marker_color=COLOR_PRIMARY_BLUE
     ))
     country_bar_fig.update_layout(
@@ -558,7 +644,7 @@ def update_overview_tab(selected_year, selected_sector):
     
     sector_bar_fig = go.Figure(go.Bar(
         y=top_5_sectors.index, x=top_5_sectors.values, orientation='h',
-        text=top_5_sectors.values, texttemplate='$%{x:,.0f}', textposition='outside',
+        text=top_5_sectors.values, texttemplate='%{x:,.0f}M ISK', textposition='outside',
         marker_color=COLOR_VALIDATION_TEAL
     ))
     sector_bar_fig.update_layout(
@@ -596,11 +682,26 @@ def update_branch_dropdown(selected_country):
     return branch_options, default_value
 
 @app.callback(
+    Output('exchange-rate-slider', 'value'),
+    Output('inflation-slider', 'value'),
+    Output('demand-slider', 'value'),
+    Output('capacity-slider', 'value'),
+    Input('reset-sliders-btn', 'n_clicks'),
+    prevent_initial_call=True
+)
+def reset_sliders(n_clicks):
+    return 0, 0, 0, 0
+
+@app.callback(
     Output('main-forecast-chart', 'figure'),
     Input('country-dropdown', 'value'),
-    Input('branch-dropdown', 'value')
+    Input('branch-dropdown', 'value'),
+    Input('exchange-rate-slider', 'value'),
+    Input('inflation-slider', 'value'),
+    Input('demand-slider', 'value'),
+    Input('capacity-slider', 'value')
 )
-def update_main_forecast_chart(selected_country, selected_branch):
+def update_main_forecast_chart(selected_country, selected_branch, exchange_rate, inflation, demand, capacity):
     if not selected_country or not selected_branch:
         return create_empty_fig("Please select a Country and Branch")
     
@@ -620,7 +721,19 @@ def update_main_forecast_chart(selected_country, selected_branch):
         dff_preds['timestamp'] = pd.to_datetime(dff_preds['timestamp'])
         dff_preds = dff_preds.sort_values('timestamp')
         validation = dff_preds[dff_preds['prediction_type'] == 'Validation']
-        future = dff_preds[dff_preds['prediction_type'] == 'Future']
+        future = dff_preds[dff_preds['prediction_type'] == 'Future'].copy()
+        
+        # Apply adjustment factors to future forecast
+        if not future.empty:
+            # Calculate combined adjustment factor
+            exchange_factor = 1 + (exchange_rate / 100)
+            inflation_factor = 1 + (inflation / 100)
+            demand_factor = 1 + (demand / 100)
+            capacity_factor = 1 + (capacity / 100)
+            
+            # Combined effect on forecast
+            combined_factor = exchange_factor * inflation_factor * demand_factor * capacity_factor
+            future['y_pred_adjusted'] = future['y_pred'] * combined_factor
         
         actual_data = []
         if not dff_hist.empty:
@@ -643,11 +756,25 @@ def update_main_forecast_chart(selected_country, selected_branch):
                 line=dict(color=COLOR_VALIDATION_TEAL, width=2.5)
             ))
         if not future.empty:
-            fig.add_trace(go.Scatter(
-                x=future['timestamp'], y=future['y_pred'],
-                mode='lines', name='Future Forecast',
-                line=dict(color=COLOR_PRIMARY_BLUE, width=3)
-            ))
+            # Show original forecast if adjustments are at 0
+            if exchange_rate == 0 and inflation == 0 and demand == 0 and capacity == 0:
+                fig.add_trace(go.Scatter(
+                    x=future['timestamp'], y=future['y_pred'],
+                    mode='lines', name='Future Forecast',
+                    line=dict(color=COLOR_PRIMARY_BLUE, width=3)
+                ))
+            else:
+                # Show both original and adjusted forecast
+                fig.add_trace(go.Scatter(
+                    x=future['timestamp'], y=future['y_pred'],
+                    mode='lines', name='Original Forecast',
+                    line=dict(color=COLOR_PRIMARY_BLUE, width=2, dash='dash'), opacity=0.5
+                ))
+                fig.add_trace(go.Scatter(
+                    x=future['timestamp'], y=future['y_pred_adjusted'],
+                    mode='lines', name='Adjusted Forecast',
+                    line=dict(color=COLOR_ACCENT_PURPLE, width=3)
+                ))
     
     title_text = f"Forecast: {selected_country} - {selected_branch}"
     fig.update_layout(
