@@ -1,3 +1,7 @@
+# THE REQUIREMENTS.TXT IS DEPRECATED!
+# NEW DEPENDENCIES SHOULD BE ADDED TO THE PYPROJECT.TOML FILE INSTEAD.
+# e.g. via uv add <package-name>
+
 # --- Core App & Data ---
 pandas        # For data manipulation (DataFrames)
 numpy         # For numerical operations
