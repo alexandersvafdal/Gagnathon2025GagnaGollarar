@@ -2,6 +2,12 @@
 
 This repository contains our team's solution for the HVDS AI Gagnathon 2025: an interactive, explainable AI (XAI) dashboard for simulating and forecasting key sectors of the Icelandic economy.
 
+### 👥 Team Members
+* Alexander Svarfdal Guðmundsson
+* Birgir Snær Ingason
+* Elvar Þór Sævarsson
+* Sigurður Baldursson
+* Thomas M. Schöller
 ---
 
 ### 🛠️ Tech Architecture
@@ -173,8 +179,4 @@ predictions_df.to_parquet('app/all_predictions.parquet')
 
 ---
 
-### �👥 Team Members
-* Alexander Svarfdal Guðmundsson
-* Birgir Snær Ingason
-* Elvar Þór Sævarsson
-* Sigurður Baldursson
+
