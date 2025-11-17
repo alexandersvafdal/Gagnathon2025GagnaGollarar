@@ -1,4 +1,4 @@
-# 🏆 HVDS Gagnathon 2025 - Team GagnaGöllarar 🏆
+# HVDS Gagnathon 2025 - Team GagnaGöllarar - Second place
 
 This repository contains our team's solution for the HVDS AI Gagnathon 2025: an interactive, explainable AI (XAI) dashboard for simulating and forecasting key sectors of the Icelandic economy.
 
